@@ -390,6 +390,13 @@ export default function Home() {
       }
     }
 
+    if (field === "date") {
+      if (isPastJob(value, "2026-06-28")) {
+        updatedProject.status = "done";
+        updates.status = "done";
+      }
+    }
+
     setSelectedProject(updatedProject);
     setProjects(prev => prev.map(p => p.id === selectedProject.id ? updatedProject : p));
     try {
@@ -1125,53 +1132,60 @@ export default function Home() {
                   
                   <div className="relative">
                     {/* Main Toggle Button */}
-                    <button
-                      onClick={() => setStatusDropdownOpen(prev => !prev)}
-                      className={`px-4 py-1.5 rounded-full text-xs font-semibold uppercase flex items-center gap-1.5 active:scale-95 transition cursor-pointer ${
-                        selectedProject.status === "on"
-                          ? "bg-on-green text-on-text"
-                          : selectedProject.status === "tbc"
-                          ? "bg-tbc-orange text-tbc-text"
-                          : "bg-done-green text-done-text"
-                      }`}
-                    >
-                      {selectedProject.status}
-                      <span className="text-[8px] opacity-70">▼</span>
-                    </button>
-
-                    {/* Dropdown Menu */}
-                    <AnimatePresence>
-                      {statusDropdownOpen && (
-                        <motion.div
-                          initial={{ opacity: 0, y: 5 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          exit={{ opacity: 0, y: 5 }}
-                          transition={{ duration: 0.1 }}
-                          className="absolute right-0 bottom-full mb-2 bg-[#1c1c1e] border border-zinc-800 rounded-2xl p-1.5 flex flex-col gap-1 shadow-2xl z-50 min-w-[90px]"
+                    {isPastJob(selectedProject.date, "2026-06-28") ? (
+                      <div className="px-4 py-1.5 rounded-full text-xs font-semibold uppercase bg-done-green text-done-text">
+                        done
+                      </div>
+                    ) : (
+                      <>
+                        <button
+                          onClick={() => setStatusDropdownOpen(prev => !prev)}
+                          className={`px-4 py-1.5 rounded-full text-xs font-semibold uppercase flex items-center gap-1.5 active:scale-95 transition cursor-pointer ${
+                            selectedProject.status === "on"
+                              ? "bg-on-green text-on-text"
+                              : selectedProject.status === "tbc"
+                              ? "bg-tbc-orange text-tbc-text"
+                              : "bg-done-green text-done-text"
+                          }`}
                         >
-                          {["on", "tbc", "done"].map((st) => (
-                            <button
-                              key={st}
-                              onClick={() => {
-                                handleInlineUpdate("status", st);
-                                setStatusDropdownOpen(false);
-                              }}
-                              className={`px-3 py-1.5 rounded-xl text-[10px] font-semibold uppercase text-center active:scale-95 transition cursor-pointer ${
-                                selectedProject.status === st
-                                  ? st === "on"
-                                    ? "bg-on-green text-on-text"
-                                    : st === "tbc"
-                                    ? "bg-tbc-orange text-tbc-text"
-                                    : "bg-done-green text-done-text"
-                                  : "text-zinc-400 hover:text-white hover:bg-zinc-855"
-                              }`}
+                          {selectedProject.status}
+                          <span className="text-[8px] opacity-70">▼</span>
+                        </button>
+
+                        {/* Dropdown Menu */}
+                        <AnimatePresence>
+                          {statusDropdownOpen && (
+                            <motion.div
+                              initial={{ opacity: 0, y: 5 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              exit={{ opacity: 0, y: 5 }}
+                              transition={{ duration: 0.1 }}
+                              className="absolute right-0 bottom-full mb-2 bg-[#1c1c1e] border border-zinc-800 rounded-2xl p-1.5 flex flex-col gap-1 shadow-2xl z-50 min-w-[90px]"
                             >
-                              {st}
-                            </button>
-                          ))}
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
+                              {["on", "tbc", "done"].map((st) => (
+                                <button
+                                  key={st}
+                                  type="button"
+                                  onClick={() => {
+                                    handleInlineUpdate("status", st);
+                                    setStatusDropdownOpen(false);
+                                  }}
+                                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold uppercase text-center transition cursor-pointer ${
+                                    st === "on"
+                                      ? "hover:bg-on-green/20 hover:text-brand-green text-zinc-400"
+                                      : st === "tbc"
+                                      ? "hover:bg-tbc-orange/20 hover:text-tbc-text text-zinc-400"
+                                      : "hover:bg-done-green/20 hover:text-done-text text-zinc-400"
+                                  }`}
+                                >
+                                  {st}
+                                </button>
+                              ))}
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                      </>
+                    )}
                   </div>
                 </div>
 
@@ -1383,9 +1397,10 @@ export default function Home() {
                   <div className="flex flex-col gap-1">
                     <label className="text-zinc-500 text-[10px] px-1">Status Schedule</label>
                     <select
-                      value={formData.status}
+                      value={isPastJob(formData.date, "2026-06-28") ? "done" : formData.status}
+                      disabled={isPastJob(formData.date, "2026-06-28")}
                       onChange={e => setFormData({...formData, status: e.target.value})}
-                      className="bg-card-bg px-4 py-3 rounded-xl text-white text-sm outline-none focus:bg-zinc-800 transition"
+                      className="bg-card-bg px-4 py-3 rounded-xl text-white text-sm outline-none focus:bg-zinc-800 transition disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       <option value="on">On</option>
                       <option value="tbc">TBC</option>
@@ -1613,9 +1628,10 @@ export default function Home() {
                   <div className="flex flex-col gap-1">
                     <label className="text-zinc-500 text-[10px] px-1">Status Schedule</label>
                     <select
-                      value={formData.status}
+                      value={isPastJob(formData.date, "2026-06-28") ? "done" : formData.status}
+                      disabled={isPastJob(formData.date, "2026-06-28")}
                       onChange={e => setFormData({...formData, status: e.target.value})}
-                      className="bg-card-bg px-4 py-3 rounded-xl text-white text-sm outline-none focus:bg-zinc-800 transition"
+                      className="bg-card-bg px-4 py-3 rounded-xl text-white text-sm outline-none focus:bg-zinc-800 transition disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       <option value="on">On</option>
                       <option value="tbc">TBC</option>
