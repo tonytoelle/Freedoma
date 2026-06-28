@@ -107,6 +107,68 @@ export default function Home() {
   // Search query state
   const [searchQuery, setSearchQuery] = useState("");
 
+  // Autofill dynamic package tracking
+  const [autofilledFields, setAutofilledFields] = useState({});
+
+  const handleFieldChange = (fieldName, value) => {
+    setFormData(prev => {
+      const nextForm = { ...prev, [fieldName]: value };
+      
+      // Clear autofill status for this field since user edited/selected it
+      setAutofilledFields(prevAuto => {
+        const nextAuto = { ...prevAuto };
+        nextAuto[fieldName] = false;
+        
+        // Trigger dynamic autofill downstream
+        if (value && value.trim().length > 0) {
+          // Find latest project where project[fieldName] matches value
+          const match = [...projects].reverse().find(p => 
+            (p[fieldName] || "").toLowerCase().trim() === value.toLowerCase().trim()
+          );
+          if (match) {
+            const fieldsToFill = ["director", "pm", "agency", "clientCompany", "projectType"];
+            fieldsToFill.forEach(f => {
+              if (f !== fieldName) {
+                const isCurrentEmpty = !prev[f] || prev[f].trim().length === 0;
+                const isCurrentAutofilled = prevAuto[f];
+                if ((isCurrentEmpty || isCurrentAutofilled) && match[f]) {
+                  nextForm[f] = match[f];
+                  nextAuto[f] = true;
+                }
+              }
+            });
+          }
+        }
+        return nextAuto;
+      });
+      
+      return nextForm;
+    });
+  };
+
+  const getInputStyle = (fieldName) => {
+    return `w-full bg-card-bg px-4 py-3 rounded-xl text-sm outline-none focus:bg-zinc-800 transition border ${
+      autofilledFields[fieldName]
+        ? "text-brand-green border-brand-green/30 bg-brand-green/5 font-semibold"
+        : "text-white border-transparent"
+    }`;
+  };
+
+  const getGridInputStyle = (fieldName) => {
+    return `bg-card-bg px-4 py-3 rounded-xl text-sm outline-none focus:bg-zinc-800 transition w-full border ${
+      autofilledFields[fieldName]
+        ? "text-brand-green border-brand-green/30 bg-brand-green/5 font-semibold"
+        : "text-white border-transparent"
+    }`;
+  };
+
+  const handleInputFocus = (fieldName, focusId, e) => {
+    setActiveSuggestionField(focusId);
+    if (autofilledFields[fieldName]) {
+      e.target.select();
+    }
+  };
+
   // Calendar Month states
   const [currentYear, setCurrentYear] = useState(2026);
   const [currentMonth, setCurrentMonth] = useState(5); // June
@@ -352,6 +414,7 @@ export default function Home() {
       clientAddress: "",
       projectType: "Editing Video ( Color Grading ) TVC"
     });
+    setAutofilledFields({});
   };
 
   const openEdit = (project) => {
@@ -371,6 +434,7 @@ export default function Home() {
       clientAddress: project.clientAddress || "",
       projectType: project.projectType || "Editing Video ( Color Grading ) TVC"
     });
+    setAutofilledFields({});
     setIsEditOpen(true);
   };
 
@@ -1193,12 +1257,12 @@ export default function Home() {
                     placeholder="Nama Project (e.g. Bumi)" 
                     required
                     value={formData.title} 
-                    onChange={e => setFormData({...formData, title: e.target.value})}
-                    onFocus={() => setActiveSuggestionField("add-title")}
+                    onChange={e => handleFieldChange("title", e.target.value)}
+                    onFocus={(e) => handleInputFocus("title", "add-title", e)}
                     onBlur={() => setActiveSuggestionField(null)}
-                    className="w-full bg-card-bg px-4 py-3 rounded-xl text-white text-sm outline-none focus:bg-zinc-800 transition"
+                    className={getInputStyle("title")}
                   />
-                  {renderSuggestions("title", formData.title, (val) => setFormData({...formData, title: val}), "add-title")}
+                  {renderSuggestions("title", formData.title, (val) => handleFieldChange("title", val), "add-title")}
                 </div>
                 
                 <div>
@@ -1206,12 +1270,12 @@ export default function Home() {
                     type="text" 
                     placeholder="Sutradara/Client (e.g. Dimas Djay)" 
                     value={formData.director} 
-                    onChange={e => setFormData({...formData, director: e.target.value})}
-                    onFocus={() => setActiveSuggestionField("add-director")}
+                    onChange={e => handleFieldChange("director", e.target.value)}
+                    onFocus={(e) => handleInputFocus("director", "add-director", e)}
                     onBlur={() => setActiveSuggestionField(null)}
-                    className="w-full bg-card-bg px-4 py-3 rounded-xl text-white text-sm outline-none focus:bg-zinc-800 transition"
+                    className={getInputStyle("director")}
                   />
-                  {renderSuggestions("director", formData.director, (val) => setFormData({...formData, director: val}), "add-director")}
+                  {renderSuggestions("director", formData.director, (val) => handleFieldChange("director", val), "add-director")}
                 </div>
 
                 <div>
@@ -1219,12 +1283,12 @@ export default function Home() {
                     type="text" 
                     placeholder="Prepared For / Client Company (e.g. PT Sayap Kreatif)" 
                     value={formData.clientCompany} 
-                    onChange={e => setFormData({...formData, clientCompany: e.target.value})}
-                    onFocus={() => setActiveSuggestionField("add-clientCompany")}
+                    onChange={e => handleFieldChange("clientCompany", e.target.value)}
+                    onFocus={(e) => handleInputFocus("clientCompany", "add-clientCompany", e)}
                     onBlur={() => setActiveSuggestionField(null)}
-                    className="w-full bg-card-bg px-4 py-3 rounded-xl text-white text-sm outline-none focus:bg-zinc-800 transition"
+                    className={getInputStyle("clientCompany")}
                   />
-                  {renderSuggestions("clientCompany", formData.clientCompany, (val) => setFormData({...formData, clientCompany: val}), "add-clientCompany")}
+                  {renderSuggestions("clientCompany", formData.clientCompany, (val) => handleFieldChange("clientCompany", val), "add-clientCompany")}
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
@@ -1233,24 +1297,24 @@ export default function Home() {
                       type="text" 
                       placeholder="PM/Producer" 
                       value={formData.pm} 
-                      onChange={e => setFormData({...formData, pm: e.target.value})}
-                      onFocus={() => setActiveSuggestionField("add-pm")}
+                      onChange={e => handleFieldChange("pm", e.target.value)}
+                      onFocus={(e) => handleInputFocus("pm", "add-pm", e)}
                       onBlur={() => setActiveSuggestionField(null)}
-                      className="bg-card-bg px-4 py-3 rounded-xl text-white text-sm outline-none focus:bg-zinc-800 transition w-full"
+                      className={getGridInputStyle("pm")}
                     />
-                    {renderSuggestions("pm", formData.pm, (val) => setFormData({...formData, pm: val}), "add-pm")}
+                    {renderSuggestions("pm", formData.pm, (val) => handleFieldChange("pm", val), "add-pm")}
                   </div>
                   <div>
                     <input 
                       type="text" 
                       placeholder="Lokasi" 
                       value={formData.agency} 
-                      onChange={e => setFormData({...formData, agency: e.target.value})}
-                      onFocus={() => setActiveSuggestionField("add-agency")}
+                      onChange={e => handleFieldChange("agency", e.target.value)}
+                      onFocus={(e) => handleInputFocus("agency", "add-agency", e)}
                       onBlur={() => setActiveSuggestionField(null)}
-                      className="bg-card-bg px-4 py-3 rounded-xl text-white text-sm outline-none focus:bg-zinc-800 transition w-full"
+                      className={getGridInputStyle("agency")}
                     />
-                    {renderSuggestions("agency", formData.agency, (val) => setFormData({...formData, agency: val}), "add-agency")}
+                    {renderSuggestions("agency", formData.agency, (val) => handleFieldChange("agency", val), "add-agency")}
                   </div>
                 </div>
 
@@ -1281,12 +1345,12 @@ export default function Home() {
                     type="text" 
                     placeholder="Jenis Pekerjaan (e.g. Editing Video)" 
                     value={formData.projectType} 
-                    onChange={e => setFormData({...formData, projectType: e.target.value})}
-                    onFocus={() => setActiveSuggestionField("add-projectType")}
+                    onChange={e => handleFieldChange("projectType", e.target.value)}
+                    onFocus={(e) => handleInputFocus("projectType", "add-projectType", e)}
                     onBlur={() => setActiveSuggestionField(null)}
-                    className="w-full bg-card-bg px-4 py-3 rounded-xl text-white text-sm outline-none focus:bg-zinc-800 transition"
+                    className={getInputStyle("projectType")}
                   />
-                  {renderSuggestions("projectType", formData.projectType, (val) => setFormData({...formData, projectType: val}), "add-projectType")}
+                  {renderSuggestions("projectType", formData.projectType, (val) => handleFieldChange("projectType", val), "add-projectType")}
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
@@ -1404,12 +1468,12 @@ export default function Home() {
                     placeholder="Nama Project" 
                     required
                     value={formData.title} 
-                    onChange={e => setFormData({...formData, title: e.target.value})}
-                    onFocus={() => setActiveSuggestionField("edit-title")}
+                    onChange={e => handleFieldChange("title", e.target.value)}
+                    onFocus={(e) => handleInputFocus("title", "edit-title", e)}
                     onBlur={() => setActiveSuggestionField(null)}
-                    className="w-full bg-card-bg px-4 py-3 rounded-xl text-white text-sm outline-none focus:bg-zinc-800 transition"
+                    className={getInputStyle("title")}
                   />
-                  {renderSuggestions("title", formData.title, (val) => setFormData({...formData, title: val}), "edit-title")}
+                  {renderSuggestions("title", formData.title, (val) => handleFieldChange("title", val), "edit-title")}
                 </div>
                 
                 <div>
@@ -1417,12 +1481,12 @@ export default function Home() {
                     type="text" 
                     placeholder="Sutradara/Client" 
                     value={formData.director} 
-                    onChange={e => setFormData({...formData, director: e.target.value})}
-                    onFocus={() => setActiveSuggestionField("edit-director")}
+                    onChange={e => handleFieldChange("director", e.target.value)}
+                    onFocus={(e) => handleInputFocus("director", "edit-director", e)}
                     onBlur={() => setActiveSuggestionField(null)}
-                    className="w-full bg-card-bg px-4 py-3 rounded-xl text-white text-sm outline-none focus:bg-zinc-800 transition"
+                    className={getInputStyle("director")}
                   />
-                  {renderSuggestions("director", formData.director, (val) => setFormData({...formData, director: val}), "edit-director")}
+                  {renderSuggestions("director", formData.director, (val) => handleFieldChange("director", val), "edit-director")}
                 </div>
 
                 <div>
@@ -1430,12 +1494,12 @@ export default function Home() {
                     type="text" 
                     placeholder="Prepared For / Client Company" 
                     value={formData.clientCompany} 
-                    onChange={e => setFormData({...formData, clientCompany: e.target.value})}
-                    onFocus={() => setActiveSuggestionField("edit-clientCompany")}
+                    onChange={e => handleFieldChange("clientCompany", e.target.value)}
+                    onFocus={(e) => handleInputFocus("clientCompany", "edit-clientCompany", e)}
                     onBlur={() => setActiveSuggestionField(null)}
-                    className="w-full bg-card-bg px-4 py-3 rounded-xl text-white text-sm outline-none focus:bg-zinc-800 transition"
+                    className={getInputStyle("clientCompany")}
                   />
-                  {renderSuggestions("clientCompany", formData.clientCompany, (val) => setFormData({...formData, clientCompany: val}), "edit-clientCompany")}
+                  {renderSuggestions("clientCompany", formData.clientCompany, (val) => handleFieldChange("clientCompany", val), "edit-clientCompany")}
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
@@ -1444,24 +1508,24 @@ export default function Home() {
                       type="text" 
                       placeholder="PM/Producer" 
                       value={formData.pm} 
-                      onChange={e => setFormData({...formData, pm: e.target.value})}
-                      onFocus={() => setActiveSuggestionField("edit-pm")}
+                      onChange={e => handleFieldChange("pm", e.target.value)}
+                      onFocus={(e) => handleInputFocus("pm", "edit-pm", e)}
                       onBlur={() => setActiveSuggestionField(null)}
-                      className="bg-card-bg px-4 py-3 rounded-xl text-white text-sm outline-none focus:bg-zinc-800 transition w-full"
+                      className={getGridInputStyle("pm")}
                     />
-                    {renderSuggestions("pm", formData.pm, (val) => setFormData({...formData, pm: val}), "edit-pm")}
+                    {renderSuggestions("pm", formData.pm, (val) => handleFieldChange("pm", val), "edit-pm")}
                   </div>
                   <div>
                     <input 
                       type="text" 
                       placeholder="Lokasi" 
                       value={formData.agency} 
-                      onChange={e => setFormData({...formData, agency: e.target.value})}
-                      onFocus={() => setActiveSuggestionField("edit-agency")}
+                      onChange={e => handleFieldChange("agency", e.target.value)}
+                      onFocus={(e) => handleInputFocus("agency", "edit-agency", e)}
                       onBlur={() => setActiveSuggestionField(null)}
-                      className="bg-card-bg px-4 py-3 rounded-xl text-white text-sm outline-none focus:bg-zinc-800 transition w-full"
+                      className={getGridInputStyle("agency")}
                     />
-                    {renderSuggestions("agency", formData.agency, (val) => setFormData({...formData, agency: val}), "edit-agency")}
+                    {renderSuggestions("agency", formData.agency, (val) => handleFieldChange("agency", val), "edit-agency")}
                   </div>
                 </div>
 
@@ -1492,12 +1556,12 @@ export default function Home() {
                     type="text" 
                     placeholder="Jenis Pekerjaan" 
                     value={formData.projectType} 
-                    onChange={e => setFormData({...formData, projectType: e.target.value})}
-                    onFocus={() => setActiveSuggestionField("edit-projectType")}
+                    onChange={e => handleFieldChange("projectType", e.target.value)}
+                    onFocus={(e) => handleInputFocus("projectType", "edit-projectType", e)}
                     onBlur={() => setActiveSuggestionField(null)}
-                    className="w-full bg-card-bg px-4 py-3 rounded-xl text-white text-sm outline-none focus:bg-zinc-800 transition"
+                    className={getInputStyle("projectType")}
                   />
-                  {renderSuggestions("projectType", formData.projectType, (val) => setFormData({...formData, projectType: val}), "edit-projectType")}
+                  {renderSuggestions("projectType", formData.projectType, (val) => handleFieldChange("projectType", val), "edit-projectType")}
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
