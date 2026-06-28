@@ -84,16 +84,17 @@ export async function generateInvoicePDF(project, userDetails) {
   doc.text(user.name, 20, 58);
 
   // Prepared For Section
-  doc.setFontSize(10);
-  doc.setFont("helvetica", "bold");
-  doc.setTextColor(0, 0, 0);
-  doc.text("Prepared For", 20, 72);
-  
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(11);
-  doc.setTextColor(60, 60, 60);
-  doc.text(project.clientCompany || "PT Sayap Kreatif Indonesia", 20, 78);
-  doc.text(`Attn ${project.contactName || "Nikena / April"}`, 20, 84);
+  if (project.clientCompany && project.clientCompany.trim().length > 0) {
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(0, 0, 0);
+    doc.text("Prepared For", 20, 72);
+    
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(11);
+    doc.setTextColor(60, 60, 60);
+    doc.text(project.clientCompany, 20, 78);
+  }
 
   // Table Divider Line (Above table headings)
   doc.setDrawColor(0, 0, 0);

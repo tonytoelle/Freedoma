@@ -21,7 +21,9 @@ import {
   DollarSign,
   ChevronDown,
   ChevronUp,
-  Trash2
+  Trash2,
+  Search,
+  Home as HomeIcon
 } from "lucide-react";
 import { 
   fetchProjects, 
@@ -52,10 +54,19 @@ function getRelativeDateString(targetDateStr, baseDate = new Date("2026-06-28"))
   if (diffDays > 1 && diffDays < 7) return `${diffDays} days from now`;
   if (diffDays === 7) return "next week";
   if (diffDays > 7) return "upcoming";
-  if (diffDays < -1) return `${Math.abs(diffDays)} days ago`;
+  if (diffDays < -1) {
+    const months = [
+      "Jan", "Feb", "Mar", "Apr", "Mei", "Jun",
+      "Jul", "Agt", "Sep", "Okt", "Nov", "Des"
+    ];
+    return months[target.getMonth()];
+  }
   
   return "";
 }
+
+const modalTransition = { type: "tween", ease: "easeOut", duration: 0.18 };
+const overlayTransition = { duration: 0.12 };
 
 // Check if job is in the past
 function isPastJob(targetDateStr, baseDateStr = "2026-06-28") {
@@ -90,8 +101,68 @@ export default function Home() {
   const [selectedProject, setSelectedProject] = useState(null);
   
   // Timeline windows for pagination
-  const [visiblePastCount, setVisiblePastCount] = useState(2);
-  const [visibleFutureCount, setVisibleFutureCount] = useState(3);
+  const [visiblePastCount, setVisiblePastCount] = useState(7);
+  const [visibleFutureCount, setVisibleFutureCount] = useState(7);
+  
+  // Search query state
+  const [searchQuery, setSearchQuery] = useState("");
+
+  // Calendar Month states
+  const [currentYear, setCurrentYear] = useState(2026);
+  const [currentMonth, setCurrentMonth] = useState(5); // June
+  const [selectedCalDate, setSelectedCalDate] = useState("2026-06-28");
+
+  const INDO_MONTHS = [
+    "Januari", "Februari", "Maret", "April", "Mei", "Juni",
+    "Juli", "Agustus", "September", "Oktober", "November", "Desember"
+  ];
+  
+  // Custom states for UI updates
+  const [statusDropdownOpen, setStatusDropdownOpen] = useState(false);
+  const [activeSuggestionField, setActiveSuggestionField] = useState(null); // "add-title", "edit-pm", etc.
+
+  const getSuggestionsForField = (fieldName, query) => {
+    if (!query || typeof query !== "string") return [];
+    const trimmed = query.trim().toLowerCase();
+    if (!trimmed) return [];
+    
+    const uniqueValues = Array.from(new Set(
+      projects
+        .map(p => p[fieldName])
+        .filter(val => val && typeof val === "string" && val.trim().length > 0)
+    ));
+    
+    return uniqueValues
+      .filter(val => val.toLowerCase().includes(trimmed) && val.toLowerCase() !== trimmed)
+      .slice(0, 3);
+  };
+
+  const renderSuggestions = (fieldName, currentVal, onSelect, fieldId) => {
+    if (activeSuggestionField !== fieldId) return null;
+    const matches = getSuggestionsForField(fieldName, currentVal);
+    if (matches.length === 0) return null;
+
+    return (
+      <div className="relative w-full">
+        <div className="absolute top-1 left-0 right-0 bg-[#1c1c1e] border border-zinc-800 rounded-xl shadow-2xl z-50 p-1 flex flex-col gap-0.5 overflow-hidden">
+          {matches.map((match, idx) => (
+            <button
+              key={idx}
+              type="button"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                onSelect(match);
+                setActiveSuggestionField(null);
+              }}
+              className="w-full text-left px-3 py-2 rounded-lg text-xs text-zinc-300 hover:text-white hover:bg-zinc-800 transition active:scale-[0.98] cursor-pointer truncate"
+            >
+              {match}
+            </button>
+          ))}
+        </div>
+      </div>
+    );
+  };
   
   // Modals
   const [isAddOpen, setIsAddOpen] = useState(false);
@@ -149,6 +220,10 @@ export default function Home() {
       // Sort projects by date
       const sorted = data.sort((a, b) => new Date(a.date) - new Date(b.date));
       setProjects(sorted);
+
+      // Dynamically determine initial pagination counts
+      setVisiblePastCount(7);
+      setVisibleFutureCount(7);
     } catch (e) {
       console.error(e);
     } finally {
@@ -176,6 +251,17 @@ export default function Home() {
       });
     }
   }, []);
+
+  useEffect(() => {
+    if (projects.length > 0) {
+      setTimeout(() => {
+        const marker = document.getElementById("today-marker");
+        if (marker) {
+          marker.scrollIntoView({ behavior: "smooth", block: "center" });
+        }
+      }, 350);
+    }
+  }, [projects]);
 
   if (!mounted) {
     return (
@@ -300,6 +386,20 @@ export default function Home() {
   
   const displayedProjects = [...visiblePast, ...visibleFuture];
 
+  // Search filter logic
+  const searchedProjects = searchQuery.trim().length === 0 
+    ? projects
+    : projects.filter(p => {
+        const q = searchQuery.toLowerCase().trim();
+        return (
+          (p.title || "").toLowerCase().includes(q) ||
+          (p.director || "").toLowerCase().includes(q) ||
+          (p.pm || "").toLowerCase().includes(q) ||
+          (p.agency || "").toLowerCase().includes(q) ||
+          (p.clientCompany || "").toLowerCase().includes(q)
+        );
+      });
+
   // Stats
   const activeCount = projects.filter(p => !isPastJob(p.date, baseDateStr) && p.status === "on").length;
   const totalUnpaidValue = projects
@@ -314,10 +414,10 @@ export default function Home() {
   }).format(totalUnpaidValue);
 
   return (
-    <div className="w-full h-full flex flex-col bg-black text-white px-6 pt-8 pb-32 overflow-y-auto no-scrollbar relative min-h-screen">
+    <div className="w-full h-full flex flex-col bg-black text-white px-6 pb-32 overflow-y-auto no-scrollbar relative min-h-screen">
       
       {/* Header */}
-      <div className="w-full flex justify-between items-center mb-6">
+      <div className="sticky top-0 bg-black/90 backdrop-blur-xl z-30 pt-8 pb-4 mb-6 -mx-6 px-6 flex justify-between items-center border-b border-zinc-900/30">
         <div className="flex items-center gap-2">
           {/* Neon Green Owl Icon */}
           <div className="w-8 h-8 rounded-full overflow-hidden flex items-center justify-center border border-brand-green/30 bg-black">
@@ -339,21 +439,193 @@ export default function Home() {
           <h2 className="text-2xl font-semibold text-right">
             <span className="text-white font-bold font-number">{activeCount}</span> <span className="text-brand-green">Projects On</span>
           </h2>
-        ) : (
+        ) : activeTab === "keuangan" ? (
           <h2 className="text-2xl font-semibold text-right">
             <span className="text-white font-bold font-number">{formattedUnpaidSum.replace("Rp", "Rp ")}</span> <span className="text-unpaid-red">Unpaid</span>
+          </h2>
+        ) : activeTab === "search" ? (
+          <h2 className="text-2xl font-semibold text-right">
+            <span className="text-white font-bold font-number">{searchedProjects.length}</span> <span className="text-brand-green">Results Found</span>
+          </h2>
+        ) : (
+          <h2 className="text-2xl font-semibold text-right">
+            <span className="text-brand-green">Kalender</span> <span className="text-white font-bold font-number">Bulanan</span>
           </h2>
         )}
       </div>
 
+      {/* Month Calendar Grid View */}
+      {activeTab === "month" && (() => {
+        const firstDayIndex = new Date(currentYear, currentMonth, 1).getDay();
+        const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+        const dayCells = [];
+        
+        for (let i = 0; i < firstDayIndex; i++) {
+          dayCells.push(null);
+        }
+        for (let i = 1; i <= daysInMonth; i++) {
+          dayCells.push(i);
+        }
+
+        const handlePrevMonth = () => {
+          if (currentMonth === 0) {
+            setCurrentMonth(11);
+            setCurrentYear(prev => prev - 1);
+          } else {
+            setCurrentMonth(prev => prev - 1);
+          }
+        };
+
+        const handleNextMonth = () => {
+          if (currentMonth === 11) {
+            setCurrentMonth(0);
+            setCurrentYear(prev => prev + 1);
+          } else {
+            setCurrentMonth(prev => prev + 1);
+          }
+        };
+
+        return (
+          <div className="flex flex-col gap-6 mb-6">
+            {/* Month Header / Controls */}
+            <div className="flex justify-between items-center bg-card-bg border border-zinc-900 rounded-2xl p-4">
+              <button 
+                type="button"
+                onClick={handlePrevMonth}
+                className="w-8 h-8 rounded-full flex items-center justify-center bg-black/40 border border-zinc-800 text-zinc-400 hover:text-white transition active:scale-95 cursor-pointer text-xs"
+              >
+                ◀
+              </button>
+              <span className="font-semibold text-white text-sm">
+                {INDO_MONTHS[currentMonth]} {currentYear}
+              </span>
+              <button 
+                type="button"
+                onClick={handleNextMonth}
+                className="w-8 h-8 rounded-full flex items-center justify-center bg-black/40 border border-zinc-800 text-zinc-400 hover:text-white transition active:scale-95 cursor-pointer text-xs"
+              >
+                ▶
+              </button>
+            </div>
+
+            {/* Month Grid Calendar */}
+            <div className="bg-card-bg border border-zinc-900 rounded-[28px] p-4 flex flex-col gap-3">
+              {/* Days of week */}
+              <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-bold text-zinc-500 uppercase tracking-wider">
+                <span>Min</span>
+                <span>Sen</span>
+                <span>Sel</span>
+                <span>Rab</span>
+                <span>Kam</span>
+                <span>Jum</span>
+                <span>Sab</span>
+              </div>
+
+              {/* Day grid */}
+              <div className="grid grid-cols-7 gap-2">
+                {dayCells.map((dayNum, idx) => {
+                  if (dayNum === null) {
+                    return <div key={`empty-${idx}`} className="aspect-square" />;
+                  }
+
+                  const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
+                  const dayProjects = projects.filter(p => p.date === dateStr);
+                  const hasJobs = dayProjects.length > 0;
+                  const isSelected = dateStr === selectedCalDate;
+                  const isToday = dateStr === "2026-06-28";
+
+                  return (
+                    <button
+                      key={`day-${dayNum}`}
+                      type="button"
+                      onClick={() => setSelectedCalDate(dateStr)}
+                      className={`aspect-square rounded-xl flex flex-col items-center justify-center relative active:scale-95 transition cursor-pointer border ${
+                        isSelected 
+                          ? "bg-brand-green/20 border-brand-green text-brand-green font-bold" 
+                          : isToday 
+                          ? "bg-zinc-800 border-zinc-700 text-white font-bold" 
+                          : "bg-black/20 border-zinc-950 text-zinc-400 hover:border-zinc-800"
+                      }`}
+                    >
+                      <span className="text-xs">{dayNum}</span>
+                      {hasJobs && (
+                        <span className={`w-1.5 h-1.5 rounded-full absolute bottom-1.5 ${
+                          isSelected ? "bg-brand-green" : "bg-brand-green/80"
+                        }`} />
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Jobs List for Selected Day */}
+            <div className="flex flex-col gap-3">
+              <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-wider px-1">
+                Project pada {formatIndoDate(selectedCalDate).full}
+              </h3>
+              {projects.filter(p => p.date === selectedCalDate).length === 0 ? (
+                <div className="text-center py-6 bg-card-bg/40 border border-zinc-900/50 rounded-2xl text-xs text-zinc-550">
+                  Tidak ada project dijadwalkan pada hari ini.
+                </div>
+              ) : (
+                <div className="flex flex-col gap-3">
+                  {projects.filter(p => p.date === selectedCalDate).map((project) => {
+                    const isPast = isPastJob(project.date);
+                    const displayStatus = isPast ? "done" : project.status;
+                    return (
+                      <div
+                        key={project.id}
+                        onClick={() => { setSelectedProject(project); setStatusDropdownOpen(false); }}
+                        className="w-full bg-card-bg rounded-2xl p-4 flex items-center justify-between gap-3 border border-zinc-900 cursor-pointer hover:border-zinc-800 transition active:scale-[0.98]"
+                      >
+                        <div className="flex-1 min-w-0 flex flex-col gap-0.5 text-left">
+                          <h4 className="text-sm font-semibold text-white truncate">{project.title}</h4>
+                          {project.director && (
+                            <span className="text-[10px] text-brand-green truncate">{project.director}</span>
+                          )}
+                        </div>
+                        <span className={`px-3 py-1 rounded-full text-[10px] font-semibold uppercase ${
+                          displayStatus === "done" 
+                            ? "bg-done-green text-done-text" 
+                            : displayStatus === "on" 
+                            ? "bg-on-green text-on-text" 
+                            : "bg-tbc-orange text-tbc-text"
+                        }`}>
+                          {displayStatus}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Search Input Field */}
+      {activeTab === "search" && (
+        <div className="relative mb-6">
+          <input
+            type="text"
+            placeholder="Cari project, sutradara, produser..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full bg-[#1c1c1e] border border-zinc-800 rounded-2xl px-4 py-3.5 pl-11 text-white text-sm outline-none focus:border-zinc-700 transition"
+          />
+          <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500" />
+        </div>
+      )}
+
       {/* Timeline Scroll Load - Older Projects */}
-      {pastProjects.length > visiblePastCount && (
+      {activeTab !== "search" && activeTab !== "month" && pastProjects.length > visiblePastCount && (
         <div className="w-full flex justify-center mb-4">
           <button 
-            onClick={() => setVisiblePastCount(prev => prev + 2)}
-            className="flex items-center gap-1 text-xs text-zinc-500 bg-card-bg px-3 py-1.5 rounded-full border border-zinc-800 hover:text-white transition"
+            onClick={() => setVisiblePastCount(prev => prev + 3)}
+            className="flex items-center gap-1.5 text-xs text-zinc-400 bg-[#1c1c1e] px-4 py-2 rounded-full border border-zinc-800 hover:text-white transition active:scale-95 cursor-pointer shadow-lg"
           >
-            <ChevronUp size={14} /> Tarik ke atas / Load Lalu ({pastProjects.length - visiblePastCount})
+            <ChevronUp size={14} /> Lihat Proyek Lalu ({pastProjects.length - visiblePastCount})
           </button>
         </div>
       )}
@@ -361,74 +633,74 @@ export default function Home() {
       {/* Projects List */}
       {loading ? (
         <div className="flex-1 flex items-center justify-center text-zinc-500 py-10">Memuat data...</div>
-      ) : displayedProjects.length === 0 ? (
-        <div className="flex-1 flex flex-col items-center justify-center text-zinc-500 py-16 text-center">
-          <p>Belum ada project ditambahkan.</p>
-          <p className="text-xs text-zinc-600 mt-1">Tap tombol (+) di bawah untuk membuat project baru.</p>
-        </div>
-      ) : (
-        <div className="flex flex-col gap-4">
-          {displayedProjects.map((project) => {
-            const relativeTime = getRelativeDateString(project.date);
-            const isPast = isPastJob(project.date);
-            
-            // Status determinations
-            const displayStatus = isPast ? "done" : project.status;
-            
-            // Format single day digit for calendar
-            const dayNum = new Date(project.date).getDate();
+      ) : activeTab === "month" ? (
+        null
+      ) : activeTab === "search" ? (
+        searchedProjects.length === 0 ? (
+          <div className="flex-1 flex flex-col items-center justify-center text-zinc-500 py-16 text-center">
+            <p>Project tidak ditemukan.</p>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-4">
+            {searchedProjects.map((project) => {
+              const relativeTime = getRelativeDateString(project.date);
+              const isPast = isPastJob(project.date);
+              const displayStatus = isPast ? "done" : project.status;
+              const dayNum = new Date(project.date).getDate();
 
-            return (
-              <motion.div
-                key={project.id}
-                layoutId={`card-${project.id}`}
-                onClick={() => setSelectedProject(project)}
-                className="w-full bg-card-bg rounded-[24px] p-4 flex items-center justify-between gap-3 border border-zinc-900 cursor-pointer hover:border-zinc-800 transition active:scale-[0.99]"
-              >
-                {/* Left Side: Date Block */}
-                <div className="w-[72px] h-[72px] bg-black/40 border border-zinc-800/50 rounded-[20px] flex flex-col items-center justify-center text-center p-1">
-                  <span className="text-2xl font-bold text-white tracking-tight font-number">{dayNum}</span>
-                  <span className="text-[10px] text-zinc-400 capitalize">{relativeTime}</span>
-                </div>
-
-                {/* Middle Info */}
-                <div className="flex-1 min-w-0 flex flex-col gap-1">
-                  <h3 className="text-[17px] font-semibold text-white leading-tight truncate">{project.title}</h3>
-                  
-                  {/* Director / Client */}
-                  {project.director && (
-                    <div className="flex items-center gap-1.5 text-xs text-brand-green">
-                      <Video size={12} />
-                      <span className="truncate leading-none">{project.director}</span>
-                    </div>
-                  )}
-                  
-                  {/* PM / Producer */}
-                  {project.pm && (
-                    <div className="flex items-center gap-1.5 text-xs text-zinc-400">
-                      <User size={12} />
-                      <span className="truncate leading-none">{project.pm}</span>
-                    </div>
-                  )}
-
-                  {/* Agency / Location */}
-                  {project.agency && (
-                    <div className="flex items-center gap-1.5 text-xs text-zinc-400">
-                      <MapPin size={12} />
-                      <span className="truncate leading-none">{project.agency}</span>
-                    </div>
-                  )}
-                  
-                  {/* Real Date */}
-                  <div className="flex items-center gap-1.5 text-xs text-zinc-500">
-                    <CalendarDays size={12} />
-                    <span className="leading-none font-number">{formatIndoDate(project.date).full}</span>
+              return (
+                <motion.div
+                  key={project.id}
+                  layoutId={`card-${project.id}`}
+                  transition={modalTransition}
+                  onClick={() => { setSelectedProject(project); setStatusDropdownOpen(false); }}
+                  className={`w-full bg-card-bg rounded-[24px] p-4 flex items-center justify-between gap-3 border border-zinc-900 cursor-pointer hover:border-zinc-800 transition active:scale-[0.99] ${
+                    isPast ? "opacity-75" : ""
+                  }`}
+                >
+                  {/* Left Side: Date Block */}
+                  <div className="w-[72px] h-[72px] bg-black/40 border border-zinc-800/50 rounded-[20px] flex flex-col items-center justify-center text-center p-1">
+                    <span className="text-2xl font-bold text-white tracking-tight font-number">{dayNum}</span>
+                    <span className="text-[10px] text-zinc-400 capitalize">{relativeTime}</span>
                   </div>
-                </div>
 
-                {/* Right Side Status Button */}
-                <div className="flex items-center justify-end">
-                  {activeTab === "calendar" ? (
+                  {/* Middle Info */}
+                  <div className="flex-1 min-w-0 flex flex-col gap-1">
+                    <h3 className="text-[17px] font-semibold text-white leading-tight truncate">{project.title}</h3>
+                    
+                    {/* Director / Client */}
+                    {project.director && (
+                      <div className="flex items-center gap-1.5 text-xs text-brand-green">
+                        <Video size={12} />
+                        <span className="truncate leading-none">{project.director}</span>
+                      </div>
+                    )}
+                    
+                    {/* PM / Producer */}
+                    {project.pm && (
+                      <div className="flex items-center gap-1.5 text-xs text-zinc-400">
+                        <User size={12} />
+                        <span className="truncate leading-none">{project.pm}</span>
+                      </div>
+                    )}
+
+                    {/* Agency / Location */}
+                    {project.agency && (
+                      <div className="flex items-center gap-1.5 text-xs text-zinc-400">
+                        <MapPin size={12} />
+                        <span className="truncate leading-none">{project.agency}</span>
+                      </div>
+                    )}
+                    
+                    {/* Real Date */}
+                    <div className="flex items-center gap-1.5 text-xs text-zinc-500">
+                      <CalendarDays size={12} />
+                      <span className="leading-none font-number">{formatIndoDate(project.date).full}</span>
+                    </div>
+                  </div>
+
+                  {/* Right Side Status Button */}
+                  <div className="flex items-center justify-end">
                     <span className={`px-4 py-2 rounded-full text-xs font-semibold uppercase min-w-[70px] text-center ${
                       displayStatus === "done" 
                         ? "bg-done-green text-done-text" 
@@ -438,65 +710,205 @@ export default function Home() {
                     }`}>
                       {displayStatus}
                     </span>
-                  ) : (
-                    <span className={`px-4 py-2 rounded-full text-xs font-semibold uppercase min-w-[70px] text-center ${
-                      project.paymentStatus === "paid"
-                        ? "bg-paid-green text-white"
-                        : "bg-unpaid-red text-white"
+                  </div>
+                </motion.div>
+              );
+            })}
+          </div>
+        )
+      ) : displayedProjects.length === 0 ? (
+        <div className="flex-1 flex flex-col items-center justify-center text-zinc-500 py-16 text-center">
+          <p>Belum ada project ditambahkan.</p>
+          <p className="text-xs text-zinc-600 mt-1">Tap tombol (+) di bawah untuk membuat project baru.</p>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-4">
+          {displayedProjects.map((project, index) => {
+            const relativeTime = getRelativeDateString(project.date);
+            const isPast = isPastJob(project.date);
+            
+            // Status determinations
+            const displayStatus = isPast ? "done" : project.status;
+            
+            // Format single day digit for calendar
+            const dayNum = new Date(project.date).getDate();
+
+            // Check if this is the first non-past project to show the "Hari Ini" marker divider
+            const isFirstCurrent = !isPast && (index === 0 || isPastJob(displayedProjects[index - 1].date));
+
+            return (
+              <React.Fragment key={project.id}>
+                {isFirstCurrent && (
+                  <div id="today-marker" className="w-full flex items-center gap-3 my-2 scroll-mt-24">
+                    <div className="h-[1px] bg-brand-green/30 flex-1" />
+                    <span className="text-[10px] font-bold text-brand-green uppercase tracking-widest bg-brand-green/10 px-3 py-1.5 rounded-full border border-brand-green/20">
+                      Hari Ini
+                    </span>
+                    <div className="h-[1px] bg-brand-green/30 flex-1" />
+                  </div>
+                )}
+
+                <motion.div
+                  layoutId={`card-${project.id}`}
+                  transition={modalTransition}
+                  onClick={() => { setSelectedProject(project); setStatusDropdownOpen(false); }}
+                  className={`w-full bg-card-bg rounded-[24px] p-4 flex items-center justify-between gap-3 border border-zinc-900 cursor-pointer hover:border-zinc-800 transition active:scale-[0.99] ${
+                    isPast ? "opacity-75" : ""
+                  }`}
+                >
+                  {/* Left Side: Date Block */}
+                  <div className="w-[72px] h-[72px] bg-black/40 border border-zinc-800/50 rounded-[20px] flex flex-col items-center justify-center text-center p-1">
+                    <span className="text-2xl font-bold text-white tracking-tight font-number">{dayNum}</span>
+                    <span className="text-[10px] text-zinc-400 capitalize">{relativeTime}</span>
+                  </div>
+
+                  {/* Middle Info */}
+                  <div className="flex-1 min-w-0 flex flex-col gap-1">
+                    <h3 className="text-[17px] font-semibold text-white leading-tight truncate">{project.title}</h3>
+                    
+                    {/* Director / Client */}
+                    {project.director && (
+                      <div className="flex items-center gap-1.5 text-xs text-brand-green">
+                        <Video size={12} />
+                        <span className="truncate leading-none">{project.director}</span>
+                      </div>
+                    )}
+                    
+                    {/* PM / Producer */}
+                    {project.pm && (
+                      <div className="flex items-center gap-1.5 text-xs text-zinc-400">
+                        <User size={12} />
+                        <span className="truncate leading-none">{project.pm}</span>
+                      </div>
+                    )}
+
+                    {/* Nominal Job - Only in Keuangan tab */}
+                    {activeTab === "keuangan" && (
+                      <div className="flex items-center gap-1.5 text-xs text-zinc-400">
+                        <Coins size={12} className="text-zinc-550" />
+                        <span className="leading-none font-number">
+                          {new Intl.NumberFormat("id-ID").format(project.value || 0)}
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Agency / Location - Only in Calendar tab */}
+                    {activeTab === "calendar" && project.agency && (
+                      <div className="flex items-center gap-1.5 text-xs text-zinc-400">
+                        <MapPin size={12} />
+                        <span className="truncate leading-none">{project.agency}</span>
+                      </div>
+                    )}
+                    
+                    {/* Real Date - Only in Calendar tab */}
+                    {activeTab === "calendar" && (
+                      <div className="flex items-center gap-1.5 text-xs text-zinc-500">
+                        <CalendarDays size={12} />
+                        <span className="leading-none font-number">{formatIndoDate(project.date).full}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Right Side Status Button */}
+                  <div className="flex items-center justify-end">
+                    {activeTab === "calendar" ? (
+                      <span className={`px-4 py-2 rounded-full text-xs font-semibold uppercase min-w-[70px] text-center ${
+                        displayStatus === "done" 
+                          ? "bg-done-green text-done-text" 
+                          : displayStatus === "on" 
+                          ? "bg-on-green text-on-text" 
+                          : "bg-tbc-orange text-tbc-text"
+                      }`}>
+                        {displayStatus}
+                      </span>
+                    ) : (
+                      <span className={`px-4 py-2 rounded-full text-xs font-semibold uppercase min-w-[70px] text-center ${
+                        project.paymentStatus === "paid"
+                          ? "bg-paid-green text-white"
+                          : "bg-unpaid-red text-white"
                     }`}>
                       {project.paymentStatus}
                     </span>
                   )}
                 </div>
               </motion.div>
-            );
-          })}
+            </React.Fragment>
+          );
+        })}
         </div>
       )}
 
       {/* Timeline Scroll Load - Future Projects */}
-      {currentAndFutureProjects.length > visibleFutureCount && (
+      {activeTab !== "search" && activeTab !== "month" && currentAndFutureProjects.length > visibleFutureCount && (
         <div className="w-full flex justify-center mt-6">
           <button 
             onClick={() => setVisibleFutureCount(prev => prev + 3)}
-            className="flex items-center gap-1 text-xs text-zinc-500 bg-card-bg px-3 py-1.5 rounded-full border border-zinc-800 hover:text-white transition"
+            className="flex items-center gap-1.5 text-xs text-zinc-400 bg-[#1c1c1e] px-4 py-2 rounded-full border border-zinc-800 hover:text-white transition active:scale-95 cursor-pointer shadow-lg"
           >
-            <ChevronDown size={14} /> Tarik turun / Load Akan Datang ({currentAndFutureProjects.length - visibleFutureCount})
+            <ChevronDown size={14} /> Lihat Proyek Akan Datang ({currentAndFutureProjects.length - visibleFutureCount})
           </button>
         </div>
       )}
 
-      {/* Floating Add Project Button */}
-      <div className="w-full flex justify-center mt-8">
-        <button 
-          onClick={() => { resetForm(); setIsAddOpen(true); }}
-          className="w-14 h-14 rounded-full bg-card-bg border border-zinc-800 hover:bg-zinc-800 flex items-center justify-center transition active:scale-95 shadow-xl text-white"
-        >
-          <Plus size={28} />
-        </button>
-      </div>
-
       {/* Bottom Floating Navigation Dock */}
       <div className="fixed bottom-6 left-0 right-0 px-6 flex justify-center z-40 pointer-events-none">
-        <div className="w-full max-w-[280px] bg-card-bg/90 backdrop-blur-xl border border-zinc-800/80 rounded-full p-2 flex items-center justify-around shadow-2xl pointer-events-auto">
-          {/* Calendar Button */}
+        <div className="w-full max-w-[360px] bg-card-bg/90 backdrop-blur-xl border border-zinc-800/80 rounded-full p-2 flex items-center justify-around shadow-2xl pointer-events-auto">
+          {/* Calendar Timeline Button */}
           <button 
             onClick={() => setActiveTab("calendar")}
-            className={`w-12 h-12 rounded-full flex items-center justify-center transition ${
+            className={`w-11 h-11 rounded-full flex items-center justify-center transition ${
               activeTab === "calendar" ? "text-brand-green bg-black/40" : "text-zinc-500 hover:text-white"
             }`}
+            title="Timeline"
           >
-            <Calendar size={24} />
+            <HomeIcon size={22} />
           </button>
 
-          {/* Finance Button (Money Sack) */}
+          {/* Month Calendar Grid Button */}
+          <button 
+            onClick={() => setActiveTab("month")}
+            className={`w-11 h-11 rounded-full flex items-center justify-center transition ${
+              activeTab === "month" ? "text-brand-green bg-black/40" : "text-zinc-500 hover:text-white"
+            }`}
+            title="Kalender"
+          >
+            <Calendar size={22} />
+          </button>
+
+          <button 
+            onClick={() => { 
+              resetForm(); 
+              if (activeTab === "month" && selectedCalDate) {
+                setFormData(prev => ({ ...prev, date: selectedCalDate }));
+              }
+              setIsAddOpen(true); 
+            }}
+            className="w-11 h-11 rounded-full flex items-center justify-center transition bg-[#2c2c2e]/60 border border-zinc-850/50 hover:bg-zinc-800 hover:text-white active:scale-95 cursor-pointer text-zinc-400"
+            title="Tambah"
+          >
+            <Plus size={22} />
+          </button>
+
+          {/* Search Button */}
+          <button 
+            onClick={() => setActiveTab("search")}
+            className={`w-11 h-11 rounded-full flex items-center justify-center transition ${
+              activeTab === "search" ? "text-brand-green bg-black/40" : "text-zinc-500 hover:text-white"
+            }`}
+            title="Cari"
+          >
+            <Search size={22} />
+          </button>
+
+          {/* Finance Button (Coins) */}
           <button 
             onClick={() => setActiveTab("keuangan")}
-            className={`w-12 h-12 rounded-full flex items-center justify-center transition ${
+            className={`w-11 h-11 rounded-full flex items-center justify-center transition ${
               activeTab === "keuangan" ? "text-brand-green bg-black/40" : "text-zinc-500 hover:text-white"
             }`}
+            title="Keuangan"
           >
-            <Coins size={24} />
+            <Coins size={22} />
           </button>
         </div>
       </div>
@@ -508,6 +920,7 @@ export default function Home() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
+            transition={overlayTransition}
             className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
             onClick={() => setSelectedProject(null)}
           >
@@ -515,7 +928,7 @@ export default function Home() {
               initial={{ y: "100%" }}
               animate={{ y: 0 }}
               exit={{ y: "100%" }}
-              transition={{ type: "spring", damping: 25, stiffness: 250 }}
+              transition={modalTransition}
               className="w-full max-w-md bg-black border-t sm:border border-zinc-900 rounded-t-[32px] sm:rounded-[32px] p-6 pb-12 sm:pb-6 flex flex-col gap-6"
               onClick={(e) => e.stopPropagation()}
             >
@@ -560,7 +973,7 @@ export default function Home() {
                     />
                     
                     <div className="flex items-center gap-1">
-                      <span className="text-[10px] text-zinc-500 font-semibold uppercase w-7">Dir</span>
+                      <span className="text-[10px] text-zinc-500 font-semibold uppercase w-10">Dir</span>
                       <input 
                         type="text" 
                         value={selectedProject.director || ""} 
@@ -569,29 +982,38 @@ export default function Home() {
                         className="bg-transparent text-xs text-brand-green font-medium w-full outline-none"
                       />
                     </div>
+                    
+                    <div className="flex items-center gap-1">
+                      <span className="text-[10px] text-zinc-500 font-semibold uppercase w-10">PM</span>
+                      <input 
+                        type="text" 
+                        value={selectedProject.pm || ""} 
+                        placeholder="PM"
+                        onChange={(e) => handleInlineUpdate("pm", e.target.value)}
+                        className="bg-transparent text-xs text-zinc-300 w-full outline-none"
+                      />
+                    </div>
 
-                    <div className="flex gap-2 items-center">
-                      <div className="flex items-center gap-1 text-xs text-zinc-400">
-                        <span className="text-[10px] text-zinc-500 font-semibold uppercase">PM</span>
-                        <input 
-                          type="text" 
-                          value={selectedProject.pm || ""} 
-                          placeholder="PM"
-                          onChange={(e) => handleInlineUpdate("pm", e.target.value)}
-                          className="bg-transparent text-xs text-zinc-300 w-16 outline-none"
-                        />
-                      </div>
-                      <span className="text-zinc-700">•</span>
-                      <div className="flex items-center gap-1 text-xs text-zinc-400">
-                        <span className="text-[10px] text-zinc-500 font-semibold uppercase">Agency</span>
-                        <input 
-                          type="text" 
-                          value={selectedProject.agency || ""} 
-                          placeholder="Agency"
-                          onChange={(e) => handleInlineUpdate("agency", e.target.value)}
-                          className="bg-transparent text-xs text-zinc-300 w-24 outline-none"
-                        />
-                      </div>
+                    <div className="flex items-center gap-1">
+                      <span className="text-[10px] text-zinc-500 font-semibold uppercase w-10">Loc</span>
+                      <input 
+                        type="text" 
+                        value={selectedProject.agency || ""} 
+                        placeholder="Lokasi"
+                        onChange={(e) => handleInlineUpdate("agency", e.target.value)}
+                        className="bg-transparent text-xs text-zinc-300 w-full outline-none"
+                      />
+                    </div>
+
+                    <div className="flex items-center gap-1">
+                      <span className="text-[10px] text-zinc-500 font-semibold uppercase w-10">Pay</span>
+                      <input 
+                        type="text" 
+                        value={selectedProject.clientCompany || ""} 
+                        placeholder="Prepared For (Client Company)"
+                        onChange={(e) => handleInlineUpdate("clientCompany", e.target.value)}
+                        className="bg-transparent text-xs text-zinc-300 w-full outline-none"
+                      />
                     </div>
                   </div>
 
@@ -608,26 +1030,59 @@ export default function Home() {
                   </button>
                 </div>
 
-                {/* Status Selector (On / TBC / Done) */}
-                <div className="flex gap-1.5 items-center pt-3 border-t border-zinc-900/50">
-                  <span className="text-[10px] text-zinc-500 font-semibold uppercase mr-1">Status:</span>
-                  {["on", "tbc", "done"].map((st) => (
+                {/* Status Selector (On / TBC / Done) as a Dropdown Capsule */}
+                <div className="flex justify-end items-center pt-3 border-t border-zinc-900/50 relative">
+                  
+                  <div className="relative">
+                    {/* Main Toggle Button */}
                     <button
-                      key={st}
-                      onClick={() => handleInlineUpdate("status", st)}
-                      className={`px-3 py-1 rounded-full text-[10px] font-semibold uppercase active:scale-95 transition cursor-pointer ${
-                        selectedProject.status === st
-                          ? st === "on"
-                            ? "bg-on-green text-on-text"
-                            : st === "tbc"
-                            ? "bg-tbc-orange text-tbc-text"
-                            : "bg-done-green text-done-text"
-                          : "bg-[#2c2c2e]/60 text-zinc-400 hover:text-white"
+                      onClick={() => setStatusDropdownOpen(prev => !prev)}
+                      className={`px-4 py-1.5 rounded-full text-xs font-semibold uppercase flex items-center gap-1.5 active:scale-95 transition cursor-pointer ${
+                        selectedProject.status === "on"
+                          ? "bg-on-green text-on-text"
+                          : selectedProject.status === "tbc"
+                          ? "bg-tbc-orange text-tbc-text"
+                          : "bg-done-green text-done-text"
                       }`}
                     >
-                      {st}
+                      {selectedProject.status}
+                      <span className="text-[8px] opacity-70">▼</span>
                     </button>
-                  ))}
+
+                    {/* Dropdown Menu */}
+                    <AnimatePresence>
+                      {statusDropdownOpen && (
+                        <motion.div
+                          initial={{ opacity: 0, y: 5 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: 5 }}
+                          transition={{ duration: 0.1 }}
+                          className="absolute right-0 bottom-full mb-2 bg-[#1c1c1e] border border-zinc-800 rounded-2xl p-1.5 flex flex-col gap-1 shadow-2xl z-50 min-w-[90px]"
+                        >
+                          {["on", "tbc", "done"].map((st) => (
+                            <button
+                              key={st}
+                              onClick={() => {
+                                handleInlineUpdate("status", st);
+                                setStatusDropdownOpen(false);
+                              }}
+                              className={`px-3 py-1.5 rounded-xl text-[10px] font-semibold uppercase text-center active:scale-95 transition cursor-pointer ${
+                                selectedProject.status === st
+                                  ? st === "on"
+                                    ? "bg-on-green text-on-text"
+                                    : st === "tbc"
+                                    ? "bg-tbc-orange text-tbc-text"
+                                    : "bg-done-green text-done-text"
+                                  : "text-zinc-400 hover:text-white hover:bg-zinc-855"
+                              }`}
+                            >
+                              {st}
+                            </button>
+                          ))}
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
                 </div>
 
                 {/* Big cash amount display */}
@@ -711,12 +1166,14 @@ export default function Home() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
+            transition={overlayTransition}
             className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 overflow-y-auto"
           >
             <motion.div 
               initial={{ y: "100%" }}
               animate={{ y: 0 }}
               exit={{ y: "100%" }}
+              transition={modalTransition}
               className="w-full max-w-md bg-black border-t sm:border border-zinc-900 rounded-t-[32px] sm:rounded-[32px] p-6 flex flex-col gap-4 max-h-[90vh] overflow-y-auto"
             >
               <div className="flex justify-between items-center">
@@ -730,38 +1187,71 @@ export default function Home() {
               </div>
 
               <form onSubmit={handleAddProject} className="flex flex-col gap-3">
-                <input 
-                  type="text" 
-                  placeholder="Nama Project (e.g. Bumi)" 
-                  required
-                  value={formData.title} 
-                  onChange={e => setFormData({...formData, title: e.target.value})}
-                  className="w-full bg-card-bg px-4 py-3 rounded-xl text-white text-sm outline-none focus:bg-zinc-800 transition"
-                />
+                <div>
+                  <input 
+                    type="text" 
+                    placeholder="Nama Project (e.g. Bumi)" 
+                    required
+                    value={formData.title} 
+                    onChange={e => setFormData({...formData, title: e.target.value})}
+                    onFocus={() => setActiveSuggestionField("add-title")}
+                    onBlur={() => setActiveSuggestionField(null)}
+                    className="w-full bg-card-bg px-4 py-3 rounded-xl text-white text-sm outline-none focus:bg-zinc-800 transition"
+                  />
+                  {renderSuggestions("title", formData.title, (val) => setFormData({...formData, title: val}), "add-title")}
+                </div>
                 
-                <input 
-                  type="text" 
-                  placeholder="Sutradara/Client (e.g. Dimas Djay)" 
-                  value={formData.director} 
-                  onChange={e => setFormData({...formData, director: e.target.value})}
-                  className="w-full bg-card-bg px-4 py-3 rounded-xl text-white text-sm outline-none focus:bg-zinc-800 transition"
-                />
+                <div>
+                  <input 
+                    type="text" 
+                    placeholder="Sutradara/Client (e.g. Dimas Djay)" 
+                    value={formData.director} 
+                    onChange={e => setFormData({...formData, director: e.target.value})}
+                    onFocus={() => setActiveSuggestionField("add-director")}
+                    onBlur={() => setActiveSuggestionField(null)}
+                    className="w-full bg-card-bg px-4 py-3 rounded-xl text-white text-sm outline-none focus:bg-zinc-800 transition"
+                  />
+                  {renderSuggestions("director", formData.director, (val) => setFormData({...formData, director: val}), "add-director")}
+                </div>
+
+                <div>
+                  <input 
+                    type="text" 
+                    placeholder="Prepared For / Client Company (e.g. PT Sayap Kreatif)" 
+                    value={formData.clientCompany} 
+                    onChange={e => setFormData({...formData, clientCompany: e.target.value})}
+                    onFocus={() => setActiveSuggestionField("add-clientCompany")}
+                    onBlur={() => setActiveSuggestionField(null)}
+                    className="w-full bg-card-bg px-4 py-3 rounded-xl text-white text-sm outline-none focus:bg-zinc-800 transition"
+                  />
+                  {renderSuggestions("clientCompany", formData.clientCompany, (val) => setFormData({...formData, clientCompany: val}), "add-clientCompany")}
+                </div>
 
                 <div className="grid grid-cols-2 gap-3">
-                  <input 
-                    type="text" 
-                    placeholder="PM/Producer" 
-                    value={formData.pm} 
-                    onChange={e => setFormData({...formData, pm: e.target.value})}
-                    className="bg-card-bg px-4 py-3 rounded-xl text-white text-sm outline-none focus:bg-zinc-800 transition"
-                  />
-                  <input 
-                    type="text" 
-                    placeholder="Agency/Lokasi" 
-                    value={formData.agency} 
-                    onChange={e => setFormData({...formData, agency: e.target.value})}
-                    className="bg-card-bg px-4 py-3 rounded-xl text-white text-sm outline-none focus:bg-zinc-800 transition"
-                  />
+                  <div>
+                    <input 
+                      type="text" 
+                      placeholder="PM/Producer" 
+                      value={formData.pm} 
+                      onChange={e => setFormData({...formData, pm: e.target.value})}
+                      onFocus={() => setActiveSuggestionField("add-pm")}
+                      onBlur={() => setActiveSuggestionField(null)}
+                      className="bg-card-bg px-4 py-3 rounded-xl text-white text-sm outline-none focus:bg-zinc-800 transition w-full"
+                    />
+                    {renderSuggestions("pm", formData.pm, (val) => setFormData({...formData, pm: val}), "add-pm")}
+                  </div>
+                  <div>
+                    <input 
+                      type="text" 
+                      placeholder="Lokasi" 
+                      value={formData.agency} 
+                      onChange={e => setFormData({...formData, agency: e.target.value})}
+                      onFocus={() => setActiveSuggestionField("add-agency")}
+                      onBlur={() => setActiveSuggestionField(null)}
+                      className="bg-card-bg px-4 py-3 rounded-xl text-white text-sm outline-none focus:bg-zinc-800 transition w-full"
+                    />
+                    {renderSuggestions("agency", formData.agency, (val) => setFormData({...formData, agency: val}), "add-agency")}
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
@@ -786,13 +1276,18 @@ export default function Home() {
                   </div>
                 </div>
 
-                <input 
-                  type="text" 
-                  placeholder="Jenis Pekerjaan (e.g. Editing Video)" 
-                  value={formData.projectType} 
-                  onChange={e => setFormData({...formData, projectType: e.target.value})}
-                  className="w-full bg-card-bg px-4 py-3 rounded-xl text-white text-sm outline-none focus:bg-zinc-800 transition"
-                />
+                <div>
+                  <input 
+                    type="text" 
+                    placeholder="Jenis Pekerjaan (e.g. Editing Video)" 
+                    value={formData.projectType} 
+                    onChange={e => setFormData({...formData, projectType: e.target.value})}
+                    onFocus={() => setActiveSuggestionField("add-projectType")}
+                    onBlur={() => setActiveSuggestionField(null)}
+                    className="w-full bg-card-bg px-4 py-3 rounded-xl text-white text-sm outline-none focus:bg-zinc-800 transition"
+                  />
+                  {renderSuggestions("projectType", formData.projectType, (val) => setFormData({...formData, projectType: val}), "add-projectType")}
+                </div>
 
                 <div className="grid grid-cols-2 gap-3">
                   <div className="flex flex-col gap-1">
@@ -846,13 +1341,7 @@ export default function Home() {
                         onChange={e => setFormData({...formData, contactPhone: e.target.value})}
                         className="w-full bg-card-bg px-4 py-3 rounded-xl text-white text-sm outline-none focus:bg-zinc-800 transition"
                       />
-                      <input 
-                        type="text" 
-                        placeholder="Perusahaan Client" 
-                        value={formData.clientCompany} 
-                        onChange={e => setFormData({...formData, clientCompany: e.target.value})}
-                        className="w-full bg-card-bg px-4 py-3 rounded-xl text-white text-sm outline-none focus:bg-zinc-800 transition"
-                      />
+
                       <textarea 
                         placeholder="Alamat Lengkap Client" 
                         value={formData.clientAddress} 
@@ -889,12 +1378,14 @@ export default function Home() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
+            transition={overlayTransition}
             className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 overflow-y-auto"
           >
             <motion.div 
               initial={{ y: "100%" }}
               animate={{ y: 0 }}
               exit={{ y: "100%" }}
+              transition={modalTransition}
               className="w-full max-w-md bg-black border-t sm:border border-zinc-900 rounded-t-[32px] sm:rounded-[32px] p-6 flex flex-col gap-4 max-h-[90vh] overflow-y-auto"
             >
               <div className="flex justify-between items-center">
@@ -905,39 +1396,73 @@ export default function Home() {
                 >
                   <X size={18} />
                 </button>
-              </div>              <form onSubmit={handleEditProject} className="flex flex-col gap-3">
-                <input 
-                  type="text" 
-                  placeholder="Nama Project" 
-                  required
-                  value={formData.title} 
-                  onChange={e => setFormData({...formData, title: e.target.value})}
-                  className="w-full bg-card-bg px-4 py-3 rounded-xl text-white text-sm outline-none focus:bg-zinc-800 transition"
-                />
+              </div>
+              <form onSubmit={handleEditProject} className="flex flex-col gap-3">
+                <div>
+                  <input 
+                    type="text" 
+                    placeholder="Nama Project" 
+                    required
+                    value={formData.title} 
+                    onChange={e => setFormData({...formData, title: e.target.value})}
+                    onFocus={() => setActiveSuggestionField("edit-title")}
+                    onBlur={() => setActiveSuggestionField(null)}
+                    className="w-full bg-card-bg px-4 py-3 rounded-xl text-white text-sm outline-none focus:bg-zinc-800 transition"
+                  />
+                  {renderSuggestions("title", formData.title, (val) => setFormData({...formData, title: val}), "edit-title")}
+                </div>
                 
-                <input 
-                  type="text" 
-                  placeholder="Sutradara/Client" 
-                  value={formData.director} 
-                  onChange={e => setFormData({...formData, director: e.target.value})}
-                  className="w-full bg-card-bg px-4 py-3 rounded-xl text-white text-sm outline-none focus:bg-zinc-800 transition"
-                />
+                <div>
+                  <input 
+                    type="text" 
+                    placeholder="Sutradara/Client" 
+                    value={formData.director} 
+                    onChange={e => setFormData({...formData, director: e.target.value})}
+                    onFocus={() => setActiveSuggestionField("edit-director")}
+                    onBlur={() => setActiveSuggestionField(null)}
+                    className="w-full bg-card-bg px-4 py-3 rounded-xl text-white text-sm outline-none focus:bg-zinc-800 transition"
+                  />
+                  {renderSuggestions("director", formData.director, (val) => setFormData({...formData, director: val}), "edit-director")}
+                </div>
+
+                <div>
+                  <input 
+                    type="text" 
+                    placeholder="Prepared For / Client Company" 
+                    value={formData.clientCompany} 
+                    onChange={e => setFormData({...formData, clientCompany: e.target.value})}
+                    onFocus={() => setActiveSuggestionField("edit-clientCompany")}
+                    onBlur={() => setActiveSuggestionField(null)}
+                    className="w-full bg-card-bg px-4 py-3 rounded-xl text-white text-sm outline-none focus:bg-zinc-800 transition"
+                  />
+                  {renderSuggestions("clientCompany", formData.clientCompany, (val) => setFormData({...formData, clientCompany: val}), "edit-clientCompany")}
+                </div>
 
                 <div className="grid grid-cols-2 gap-3">
-                  <input 
-                    type="text" 
-                    placeholder="PM/Producer" 
-                    value={formData.pm} 
-                    onChange={e => setFormData({...formData, pm: e.target.value})}
-                    className="bg-card-bg px-4 py-3 rounded-xl text-white text-sm outline-none focus:bg-zinc-800 transition"
-                  />
-                  <input 
-                    type="text" 
-                    placeholder="Agency/Lokasi" 
-                    value={formData.agency} 
-                    onChange={e => setFormData({...formData, agency: e.target.value})}
-                    className="bg-card-bg px-4 py-3 rounded-xl text-white text-sm outline-none focus:bg-zinc-800 transition"
-                  />
+                  <div>
+                    <input 
+                      type="text" 
+                      placeholder="PM/Producer" 
+                      value={formData.pm} 
+                      onChange={e => setFormData({...formData, pm: e.target.value})}
+                      onFocus={() => setActiveSuggestionField("edit-pm")}
+                      onBlur={() => setActiveSuggestionField(null)}
+                      className="bg-card-bg px-4 py-3 rounded-xl text-white text-sm outline-none focus:bg-zinc-800 transition w-full"
+                    />
+                    {renderSuggestions("pm", formData.pm, (val) => setFormData({...formData, pm: val}), "edit-pm")}
+                  </div>
+                  <div>
+                    <input 
+                      type="text" 
+                      placeholder="Lokasi" 
+                      value={formData.agency} 
+                      onChange={e => setFormData({...formData, agency: e.target.value})}
+                      onFocus={() => setActiveSuggestionField("edit-agency")}
+                      onBlur={() => setActiveSuggestionField(null)}
+                      className="bg-card-bg px-4 py-3 rounded-xl text-white text-sm outline-none focus:bg-zinc-800 transition w-full"
+                    />
+                    {renderSuggestions("agency", formData.agency, (val) => setFormData({...formData, agency: val}), "edit-agency")}
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
@@ -962,13 +1487,18 @@ export default function Home() {
                   </div>
                 </div>
 
-                <input 
-                  type="text" 
-                  placeholder="Jenis Pekerjaan" 
-                  value={formData.projectType} 
-                  onChange={e => setFormData({...formData, projectType: e.target.value})}
-                  className="w-full bg-card-bg px-4 py-3 rounded-xl text-white text-sm outline-none focus:bg-zinc-800 transition"
-                />
+                <div>
+                  <input 
+                    type="text" 
+                    placeholder="Jenis Pekerjaan" 
+                    value={formData.projectType} 
+                    onChange={e => setFormData({...formData, projectType: e.target.value})}
+                    onFocus={() => setActiveSuggestionField("edit-projectType")}
+                    onBlur={() => setActiveSuggestionField(null)}
+                    className="w-full bg-card-bg px-4 py-3 rounded-xl text-white text-sm outline-none focus:bg-zinc-800 transition"
+                  />
+                  {renderSuggestions("projectType", formData.projectType, (val) => setFormData({...formData, projectType: val}), "edit-projectType")}
+                </div>
 
                 <div className="grid grid-cols-2 gap-3">
                   <div className="flex flex-col gap-1">
@@ -1022,13 +1552,7 @@ export default function Home() {
                         onChange={e => setFormData({...formData, contactPhone: e.target.value})}
                         className="w-full bg-card-bg px-4 py-3 rounded-xl text-white text-sm outline-none focus:bg-zinc-800 transition"
                       />
-                      <input 
-                        type="text" 
-                        placeholder="Perusahaan Client" 
-                        value={formData.clientCompany} 
-                        onChange={e => setFormData({...formData, clientCompany: e.target.value})}
-                        className="w-full bg-card-bg px-4 py-3 rounded-xl text-white text-sm outline-none focus:bg-zinc-800 transition"
-                      />
+
                       <textarea 
                         placeholder="Alamat Lengkap Client" 
                         value={formData.clientAddress} 
@@ -1075,12 +1599,14 @@ export default function Home() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
+            transition={overlayTransition}
             className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 overflow-y-auto"
           >
             <motion.div 
               initial={{ y: "100%" }}
               animate={{ y: 0 }}
               exit={{ y: "100%" }}
+              transition={modalTransition}
               className="w-full max-w-md bg-black border-t sm:border border-zinc-900 rounded-t-[32px] sm:rounded-[32px] p-6 flex flex-col gap-4 max-h-[90vh] overflow-y-auto"
             >
               <div className="flex justify-between items-center">
