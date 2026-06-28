@@ -377,11 +377,23 @@ export default function Home() {
   // Inline Update
   const handleInlineUpdate = async (field, value) => {
     if (!selectedProject) return;
-    const updatedProject = { ...selectedProject, [field]: value };
+    let updatedProject = { ...selectedProject, [field]: value };
+    let updates = { [field]: value };
+
+    if (field === "paymentStatus") {
+      if (value === "paid") {
+        updatedProject.paymentDate = "2026-06-28";
+        updates.paymentDate = "2026-06-28";
+      } else {
+        updatedProject.paymentDate = "";
+        updates.paymentDate = "";
+      }
+    }
+
     setSelectedProject(updatedProject);
     setProjects(prev => prev.map(p => p.id === selectedProject.id ? updatedProject : p));
     try {
-      await updateProject(selectedProject.id, { [field]: value });
+      await updateProject(selectedProject.id, updates);
     } catch (err) {
       console.error("Failed to update project inline:", err);
     }
@@ -406,6 +418,7 @@ export default function Home() {
       date: "2026-06-28",
       status: "on",
       paymentStatus: "unpaid",
+      paymentDate: "",
       value: "",
       notes: "",
       contactName: "",
@@ -426,6 +439,7 @@ export default function Home() {
       date: project.date || "2026-06-28",
       status: project.status || "on",
       paymentStatus: project.paymentStatus || "unpaid",
+      paymentDate: project.paymentDate || "",
       value: project.value || "",
       notes: project.notes || "",
       contactName: project.contactName || "",
@@ -1079,6 +1093,18 @@ export default function Home() {
                         className="bg-transparent text-xs text-zinc-300 w-full outline-none"
                       />
                     </div>
+
+                    {selectedProject.paymentStatus === "paid" && (
+                      <div className="flex items-center gap-1 border-t border-zinc-900/50 pt-1.5 mt-1">
+                        <span className="text-[10px] text-zinc-500 font-semibold uppercase w-10">Paid</span>
+                        <input 
+                          type="date" 
+                          value={selectedProject.paymentDate || "2026-06-28"} 
+                          onChange={(e) => handleInlineUpdate("paymentDate", e.target.value)}
+                          className="bg-transparent text-xs text-brand-green font-semibold w-full outline-none"
+                        />
+                      </div>
+                    )}
                   </div>
 
                   {/* Payment Status Pill (Clickable Toggle) */}
@@ -1370,7 +1396,14 @@ export default function Home() {
                     <label className="text-zinc-500 text-[10px] px-1">Status Pembayaran</label>
                     <select
                       value={formData.paymentStatus}
-                      onChange={e => setFormData({...formData, paymentStatus: e.target.value})}
+                      onChange={e => {
+                        const val = e.target.value;
+                        setFormData(prev => ({
+                          ...prev,
+                          paymentStatus: val,
+                          paymentDate: val === "paid" ? "2026-06-28" : ""
+                        }));
+                      }}
                       className="bg-card-bg px-4 py-3 rounded-xl text-white text-sm outline-none focus:bg-zinc-800 transition"
                     >
                       <option value="unpaid">Unpaid</option>
@@ -1378,6 +1411,18 @@ export default function Home() {
                     </select>
                   </div>
                 </div>
+
+                {formData.paymentStatus === "paid" && (
+                  <div className="flex flex-col gap-1">
+                    <label className="text-zinc-500 text-[10px] px-1">Tanggal Pembayaran</label>
+                    <input 
+                      type="date" 
+                      value={formData.paymentDate || "2026-06-28"} 
+                      onChange={e => setFormData({...formData, paymentDate: e.target.value})}
+                      className="bg-card-bg px-4 py-3 rounded-xl text-white text-sm outline-none focus:bg-zinc-800 transition"
+                    />
+                  </div>
+                )}
 
                 <div className="border-t border-zinc-900 pt-3 flex flex-col gap-2">
                   <button
@@ -1581,7 +1626,14 @@ export default function Home() {
                     <label className="text-zinc-500 text-[10px] px-1">Status Pembayaran</label>
                     <select
                       value={formData.paymentStatus}
-                      onChange={e => setFormData({...formData, paymentStatus: e.target.value})}
+                      onChange={e => {
+                        const val = e.target.value;
+                        setFormData(prev => ({
+                          ...prev,
+                          paymentStatus: val,
+                          paymentDate: val === "paid" ? "2026-06-28" : ""
+                        }));
+                      }}
                       className="bg-card-bg px-4 py-3 rounded-xl text-white text-sm outline-none focus:bg-zinc-800 transition"
                     >
                       <option value="unpaid">Unpaid</option>
@@ -1589,6 +1641,18 @@ export default function Home() {
                     </select>
                   </div>
                 </div>
+
+                {formData.paymentStatus === "paid" && (
+                  <div className="flex flex-col gap-1">
+                    <label className="text-zinc-500 text-[10px] px-1">Tanggal Pembayaran</label>
+                    <input 
+                      type="date" 
+                      value={formData.paymentDate || "2026-06-28"} 
+                      onChange={e => setFormData({...formData, paymentDate: e.target.value})}
+                      className="bg-card-bg px-4 py-3 rounded-xl text-white text-sm outline-none focus:bg-zinc-800 transition"
+                    />
+                  </div>
+                )}
 
                 <div className="border-t border-zinc-900 pt-3 flex flex-col gap-2">
                   <button
