@@ -69,6 +69,20 @@ function isPastJob(targetDateStr, baseDateStr = "2026-06-28") {
   return tDate.getTime() < bDate.getTime();
 }
 
+// Format raw number to dot separated string
+function formatNumberWithDots(val) {
+  if (val === undefined || val === null || val === "") return "";
+  const numStr = String(val).replace(/[^0-9]/g, "");
+  if (!numStr) return "";
+  return new Intl.NumberFormat("id-ID").format(Number(numStr));
+}
+
+// Parse dot separated string back to number
+function parseDotsToNumber(str) {
+  if (!str) return 0;
+  return Number(String(str).replace(/[^0-9]/g, "")) || 0;
+}
+
 export default function Home() {
   const [activeTab, setActiveTab] = useState("calendar"); // 'calendar' | 'keuangan'
   const [projects, setProjects] = useState([]);
@@ -83,6 +97,8 @@ export default function Home() {
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [showAddBAST, setShowAddBAST] = useState(false);
+  const [showEditBAST, setShowEditBAST] = useState(false);
   
   // SSR Hydration safeguard
   const [mounted, setMounted] = useState(false);
@@ -178,14 +194,7 @@ export default function Home() {
   // Save Settings
   const handleSaveSettings = () => {
     localStorage.setItem("freedoma_user_profile", JSON.stringify(userDetails));
-    if (firebaseInput.apiKey && firebaseInput.projectId) {
-      saveFirebaseConfig(firebaseInput);
-    } else {
-      saveFirebaseConfig(null);
-    }
     setIsSettingsOpen(false);
-    // Reload database source
-    loadAllData();
   };
 
   // Add Project
@@ -215,6 +224,19 @@ export default function Home() {
     setProjects(prev => prev.map(p => p.id === selectedProject.id ? { ...p, ...cleanUpdates } : p).sort((a, b) => new Date(a.date) - new Date(b.date)));
     setSelectedProject({ ...selectedProject, ...cleanUpdates });
     setIsEditOpen(false);
+  };
+
+  // Inline Update
+  const handleInlineUpdate = async (field, value) => {
+    if (!selectedProject) return;
+    const updatedProject = { ...selectedProject, [field]: value };
+    setSelectedProject(updatedProject);
+    setProjects(prev => prev.map(p => p.id === selectedProject.id ? updatedProject : p));
+    try {
+      await updateProject(selectedProject.id, { [field]: value });
+    } catch (err) {
+      console.error("Failed to update project inline:", err);
+    }
   };
 
   // Delete Project
@@ -315,11 +337,11 @@ export default function Home() {
       <div className="mb-6">
         {activeTab === "calendar" ? (
           <h2 className="text-2xl font-semibold text-right">
-            <span className="text-white font-bold">{activeCount}</span> <span className="text-brand-green">Projects On</span>
+            <span className="text-white font-bold font-number">{activeCount}</span> <span className="text-brand-green">Projects On</span>
           </h2>
         ) : (
           <h2 className="text-2xl font-semibold text-right">
-            <span className="text-white font-bold">{formattedUnpaidSum.replace("Rp", "Rp ")}</span> <span className="text-unpaid-red">Unpaid</span>
+            <span className="text-white font-bold font-number">{formattedUnpaidSum.replace("Rp", "Rp ")}</span> <span className="text-unpaid-red">Unpaid</span>
           </h2>
         )}
       </div>
@@ -365,7 +387,7 @@ export default function Home() {
               >
                 {/* Left Side: Date Block */}
                 <div className="w-[72px] h-[72px] bg-black/40 border border-zinc-800/50 rounded-[20px] flex flex-col items-center justify-center text-center p-1">
-                  <span className="text-2xl font-bold text-white tracking-tight">{dayNum}</span>
+                  <span className="text-2xl font-bold text-white tracking-tight font-number">{dayNum}</span>
                   <span className="text-[10px] text-zinc-400 capitalize">{relativeTime}</span>
                 </div>
 
@@ -400,7 +422,7 @@ export default function Home() {
                   {/* Real Date */}
                   <div className="flex items-center gap-1.5 text-xs text-zinc-500">
                     <CalendarDays size={12} />
-                    <span className="leading-none">{formatIndoDate(project.date).full}</span>
+                    <span className="leading-none font-number">{formatIndoDate(project.date).full}</span>
                   </div>
                 </div>
 
@@ -517,49 +539,118 @@ export default function Home() {
               <div className="bg-card-bg rounded-[24px] p-5 border border-zinc-900 flex flex-col gap-4">
                 {/* Upper block with Info */}
                 <div className="flex items-center justify-between gap-3">
-                  <div className="w-[72px] h-[72px] bg-black/40 border border-zinc-800/50 rounded-[20px] flex flex-col items-center justify-center text-center">
-                    <span className="text-2xl font-bold text-white tracking-tight">{new Date(selectedProject.date).getDate()}</span>
+                  <div className="w-[72px] h-[72px] bg-black/40 border border-zinc-800/50 rounded-[20px] flex flex-col items-center justify-center text-center relative overflow-hidden">
+                    <span className="text-2xl font-bold text-white tracking-tight font-number">{new Date(selectedProject.date).getDate()}</span>
                     <span className="text-[10px] text-zinc-400 capitalize">{getRelativeDateString(selectedProject.date)}</span>
+                    <input 
+                      type="date" 
+                      value={selectedProject.date} 
+                      onChange={(e) => handleInlineUpdate("date", e.target.value)} 
+                      className="absolute inset-0 opacity-0 cursor-pointer" 
+                    />
                   </div>
 
-                  <div className="flex-1 min-w-0">
-                    <h3 className="text-xl font-bold text-white leading-tight truncate">{selectedProject.title}</h3>
-                    {selectedProject.director && (
-                      <p className="text-xs text-brand-green font-medium truncate mt-0.5">{selectedProject.director}</p>
-                    )}
-                    <p className="text-xs text-zinc-500 mt-1">{selectedProject.pm || "PM"} • {selectedProject.agency || "Agency"}</p>
-                    <p className="text-xs text-zinc-600">{formatIndoDate(selectedProject.date).full}</p>
+                  <div className="flex-1 min-w-0 flex flex-col gap-0.5">
+                    <input 
+                      type="text" 
+                      value={selectedProject.title} 
+                      placeholder="Judul Project"
+                      onChange={(e) => handleInlineUpdate("title", e.target.value)}
+                      className="bg-transparent font-bold text-lg text-white w-full outline-none border-b border-transparent focus:border-zinc-800"
+                    />
+                    
+                    <div className="flex items-center gap-1">
+                      <span className="text-[10px] text-zinc-500 font-semibold uppercase w-7">Dir</span>
+                      <input 
+                        type="text" 
+                        value={selectedProject.director || ""} 
+                        placeholder="Sutradara"
+                        onChange={(e) => handleInlineUpdate("director", e.target.value)}
+                        className="bg-transparent text-xs text-brand-green font-medium w-full outline-none"
+                      />
+                    </div>
+
+                    <div className="flex gap-2 items-center">
+                      <div className="flex items-center gap-1 text-xs text-zinc-400">
+                        <span className="text-[10px] text-zinc-500 font-semibold uppercase">PM</span>
+                        <input 
+                          type="text" 
+                          value={selectedProject.pm || ""} 
+                          placeholder="PM"
+                          onChange={(e) => handleInlineUpdate("pm", e.target.value)}
+                          className="bg-transparent text-xs text-zinc-300 w-16 outline-none"
+                        />
+                      </div>
+                      <span className="text-zinc-700">•</span>
+                      <div className="flex items-center gap-1 text-xs text-zinc-400">
+                        <span className="text-[10px] text-zinc-500 font-semibold uppercase">Agency</span>
+                        <input 
+                          type="text" 
+                          value={selectedProject.agency || ""} 
+                          placeholder="Agency"
+                          onChange={(e) => handleInlineUpdate("agency", e.target.value)}
+                          className="bg-transparent text-xs text-zinc-300 w-24 outline-none"
+                        />
+                      </div>
+                    </div>
                   </div>
 
-                  {/* Payment Status Pill */}
-                  <span className={`px-4 py-2 rounded-full text-xs font-semibold uppercase ${
-                    selectedProject.paymentStatus === "paid"
-                      ? "bg-paid-green text-white"
-                      : "bg-unpaid-red text-white"
-                  }`}>
+                  {/* Payment Status Pill (Clickable Toggle) */}
+                  <button 
+                    onClick={() => handleInlineUpdate("paymentStatus", selectedProject.paymentStatus === "paid" ? "unpaid" : "paid")}
+                    className={`px-4 py-2 rounded-full text-xs font-semibold uppercase active:scale-95 transition-all cursor-pointer ${
+                      selectedProject.paymentStatus === "paid"
+                        ? "bg-paid-green text-white"
+                        : "bg-unpaid-red text-white"
+                    }`}
+                  >
                     {selectedProject.paymentStatus}
-                  </span>
+                  </button>
+                </div>
+
+                {/* Status Selector (On / TBC / Done) */}
+                <div className="flex gap-1.5 items-center pt-3 border-t border-zinc-900/50">
+                  <span className="text-[10px] text-zinc-500 font-semibold uppercase mr-1">Status:</span>
+                  {["on", "tbc", "done"].map((st) => (
+                    <button
+                      key={st}
+                      onClick={() => handleInlineUpdate("status", st)}
+                      className={`px-3 py-1 rounded-full text-[10px] font-semibold uppercase active:scale-95 transition cursor-pointer ${
+                        selectedProject.status === st
+                          ? st === "on"
+                            ? "bg-on-green text-on-text"
+                            : st === "tbc"
+                            ? "bg-tbc-orange text-tbc-text"
+                            : "bg-done-green text-done-text"
+                          : "bg-[#2c2c2e]/60 text-zinc-400 hover:text-white"
+                      }`}
+                    >
+                      {st}
+                    </button>
+                  ))}
                 </div>
 
                 {/* Big cash amount display */}
-                <div className="w-full text-center py-4 border-t border-b border-zinc-800/50">
-                  <span className="text-[28px] font-light text-zinc-300 tracking-wide">
-                    {new Intl.NumberFormat("id-ID", {
-                      style: "currency",
-                      currency: "IDR",
-                      minimumFractionDigits: 0,
-                      maximumFractionDigits: 0
-                    }).format(selectedProject.value).replace("Rp", "Rp ")}
-                  </span>
+                <div className="w-full flex items-center justify-center gap-1 py-3 border-t border-b border-zinc-800/50">
+                  <span className="text-xl font-light text-zinc-500">Rp</span>
+                  <input 
+                    type="text"
+                    value={formatNumberWithDots(selectedProject.value)}
+                    onChange={(e) => handleInlineUpdate("value", parseDotsToNumber(e.target.value))}
+                    className="bg-transparent text-[24px] font-light text-zinc-300 tracking-wide text-center outline-none w-48 font-number"
+                  />
                 </div>
 
                 {/* Custom notes info banner */}
-                {selectedProject.notes && (
-                  <div className="flex items-start gap-2.5 bg-black/30 border border-zinc-800/40 rounded-[16px] p-3 text-xs text-zinc-400 leading-normal">
-                    <Info size={14} className="text-zinc-500 mt-0.5 flex-shrink-0" />
-                    <span>{selectedProject.notes}</span>
-                  </div>
-                )}
+                <div className="flex items-start gap-2.5 bg-black/30 border border-zinc-800/40 rounded-[16px] p-3 text-xs text-zinc-400 leading-normal">
+                  <Info size={14} className="text-zinc-500 mt-0.5 flex-shrink-0" />
+                  <textarea
+                    placeholder="Tambah keterangan / notes..."
+                    value={selectedProject.notes || ""}
+                    onChange={(e) => handleInlineUpdate("notes", e.target.value)}
+                    className="bg-transparent text-xs text-zinc-300 w-full outline-none resize-none h-12"
+                  />
+                </div>
 
                 {/* Tools Section Grid (2x2) */}
                 <div className="grid grid-cols-2 gap-3 mt-2">
@@ -645,7 +736,7 @@ export default function Home() {
                   required
                   value={formData.title} 
                   onChange={e => setFormData({...formData, title: e.target.value})}
-                  className="w-full bg-card-bg border border-zinc-850 px-4 py-3 rounded-xl text-white text-sm outline-none focus:border-brand-green"
+                  className="w-full bg-card-bg px-4 py-3 rounded-xl text-white text-sm outline-none focus:bg-zinc-800 transition"
                 />
                 
                 <input 
@@ -653,7 +744,7 @@ export default function Home() {
                   placeholder="Sutradara/Client (e.g. Dimas Djay)" 
                   value={formData.director} 
                   onChange={e => setFormData({...formData, director: e.target.value})}
-                  className="w-full bg-card-bg border border-zinc-850 px-4 py-3 rounded-xl text-white text-sm outline-none focus:border-brand-green"
+                  className="w-full bg-card-bg px-4 py-3 rounded-xl text-white text-sm outline-none focus:bg-zinc-800 transition"
                 />
 
                 <div className="grid grid-cols-2 gap-3">
@@ -662,14 +753,14 @@ export default function Home() {
                     placeholder="PM/Producer" 
                     value={formData.pm} 
                     onChange={e => setFormData({...formData, pm: e.target.value})}
-                    className="bg-card-bg border border-zinc-850 px-4 py-3 rounded-xl text-white text-sm outline-none focus:border-brand-green"
+                    className="bg-card-bg px-4 py-3 rounded-xl text-white text-sm outline-none focus:bg-zinc-800 transition"
                   />
                   <input 
                     type="text" 
                     placeholder="Agency/Lokasi" 
                     value={formData.agency} 
                     onChange={e => setFormData({...formData, agency: e.target.value})}
-                    className="bg-card-bg border border-zinc-850 px-4 py-3 rounded-xl text-white text-sm outline-none focus:border-brand-green"
+                    className="bg-card-bg px-4 py-3 rounded-xl text-white text-sm outline-none focus:bg-zinc-800 transition"
                   />
                 </div>
 
@@ -680,17 +771,17 @@ export default function Home() {
                       type="date" 
                       value={formData.date} 
                       onChange={e => setFormData({...formData, date: e.target.value})}
-                      className="bg-card-bg border border-zinc-850 px-4 py-3 rounded-xl text-white text-sm outline-none focus:border-brand-green"
+                      className="bg-card-bg px-4 py-3 rounded-xl text-white text-sm outline-none focus:bg-zinc-800 transition"
                     />
                   </div>
                   <div className="flex flex-col gap-1">
                     <label className="text-zinc-500 text-[10px] px-1">Nilai Project (IDR)</label>
                     <input 
-                      type="number" 
-                      placeholder="e.g. 10000000" 
-                      value={formData.value} 
-                      onChange={e => setFormData({...formData, value: e.target.value})}
-                      className="bg-card-bg border border-zinc-850 px-4 py-3 rounded-xl text-white text-sm outline-none focus:border-brand-green"
+                      type="text" 
+                      placeholder="e.g. 10.000.000" 
+                      value={formatNumberWithDots(formData.value)} 
+                      onChange={e => setFormData({...formData, value: parseDotsToNumber(e.target.value)})}
+                      className="bg-card-bg px-4 py-3 rounded-xl text-white text-sm outline-none focus:bg-zinc-800 transition font-number"
                     />
                   </div>
                 </div>
@@ -700,7 +791,7 @@ export default function Home() {
                   placeholder="Jenis Pekerjaan (e.g. Editing Video)" 
                   value={formData.projectType} 
                   onChange={e => setFormData({...formData, projectType: e.target.value})}
-                  className="w-full bg-card-bg border border-zinc-850 px-4 py-3 rounded-xl text-white text-sm outline-none focus:border-brand-green"
+                  className="w-full bg-card-bg px-4 py-3 rounded-xl text-white text-sm outline-none focus:bg-zinc-800 transition"
                 />
 
                 <div className="grid grid-cols-2 gap-3">
@@ -709,10 +800,11 @@ export default function Home() {
                     <select
                       value={formData.status}
                       onChange={e => setFormData({...formData, status: e.target.value})}
-                      className="bg-card-bg border border-zinc-850 px-4 py-3 rounded-xl text-white text-sm outline-none focus:border-brand-green"
+                      className="bg-card-bg px-4 py-3 rounded-xl text-white text-sm outline-none focus:bg-zinc-800 transition"
                     >
                       <option value="on">On</option>
                       <option value="tbc">TBC</option>
+                      <option value="done">Done</option>
                     </select>
                   </div>
                   <div className="flex flex-col gap-1">
@@ -720,7 +812,7 @@ export default function Home() {
                     <select
                       value={formData.paymentStatus}
                       onChange={e => setFormData({...formData, paymentStatus: e.target.value})}
-                      className="bg-card-bg border border-zinc-850 px-4 py-3 rounded-xl text-white text-sm outline-none focus:border-brand-green"
+                      className="bg-card-bg px-4 py-3 rounded-xl text-white text-sm outline-none focus:bg-zinc-800 transition"
                     >
                       <option value="unpaid">Unpaid</option>
                       <option value="paid">Paid</option>
@@ -729,41 +821,53 @@ export default function Home() {
                 </div>
 
                 <div className="border-t border-zinc-900 pt-3 flex flex-col gap-2">
-                  <span className="text-zinc-500 text-[11px] px-1 font-semibold">Detil Client & BAST</span>
-                  <input 
-                    type="text" 
-                    placeholder="Nama Kontak Client (e.g. Niken Nurul)" 
-                    value={formData.contactName} 
-                    onChange={e => setFormData({...formData, contactName: e.target.value})}
-                    className="w-full bg-card-bg border border-zinc-850 px-4 py-3 rounded-xl text-white text-sm outline-none focus:border-brand-green"
-                  />
-                  <input 
-                    type="text" 
-                    placeholder="No WA Client (e.g. 087842252505)" 
-                    value={formData.contactPhone} 
-                    onChange={e => setFormData({...formData, contactPhone: e.target.value})}
-                    className="w-full bg-card-bg border border-zinc-850 px-4 py-3 rounded-xl text-white text-sm outline-none focus:border-brand-green"
-                  />
-                  <input 
-                    type="text" 
-                    placeholder="Perusahaan Client" 
-                    value={formData.clientCompany} 
-                    onChange={e => setFormData({...formData, clientCompany: e.target.value})}
-                    className="w-full bg-card-bg border border-zinc-850 px-4 py-3 rounded-xl text-white text-sm outline-none focus:border-brand-green"
-                  />
-                  <textarea 
-                    placeholder="Alamat Lengkap Client" 
-                    value={formData.clientAddress} 
-                    onChange={e => setFormData({...formData, clientAddress: e.target.value})}
-                    className="w-full bg-card-bg border border-zinc-850 px-4 py-3 rounded-xl text-white text-sm outline-none focus:border-brand-green h-16 resize-none"
-                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowAddBAST(!showAddBAST)}
+                    className="flex justify-between items-center w-full text-left text-zinc-400 hover:text-white transition px-1 py-1"
+                  >
+                    <span className="text-[11px] font-semibold uppercase tracking-wider">Detil Client & BAST (Opsional)</span>
+                    <ChevronDown size={16} className={`transition-transform duration-200 ${showAddBAST ? "rotate-180" : ""}`} />
+                  </button>
+                  
+                  {showAddBAST && (
+                    <div className="flex flex-col gap-2 mt-1">
+                      <input 
+                        type="text" 
+                        placeholder="Nama Kontak Client (e.g. Niken Nurul)" 
+                        value={formData.contactName} 
+                        onChange={e => setFormData({...formData, contactName: e.target.value})}
+                        className="w-full bg-card-bg px-4 py-3 rounded-xl text-white text-sm outline-none focus:bg-zinc-800 transition"
+                      />
+                      <input 
+                        type="text" 
+                        placeholder="No WA Client (e.g. 087842252505)" 
+                        value={formData.contactPhone} 
+                        onChange={e => setFormData({...formData, contactPhone: e.target.value})}
+                        className="w-full bg-card-bg px-4 py-3 rounded-xl text-white text-sm outline-none focus:bg-zinc-800 transition"
+                      />
+                      <input 
+                        type="text" 
+                        placeholder="Perusahaan Client" 
+                        value={formData.clientCompany} 
+                        onChange={e => setFormData({...formData, clientCompany: e.target.value})}
+                        className="w-full bg-card-bg px-4 py-3 rounded-xl text-white text-sm outline-none focus:bg-zinc-800 transition"
+                      />
+                      <textarea 
+                        placeholder="Alamat Lengkap Client" 
+                        value={formData.clientAddress} 
+                        onChange={e => setFormData({...formData, clientAddress: e.target.value})}
+                        className="w-full bg-card-bg px-4 py-3 rounded-xl text-white text-sm outline-none focus:bg-zinc-800 transition h-16 resize-none"
+                      />
+                    </div>
+                  )}
                 </div>
 
                 <textarea 
                   placeholder="Keterangan / Notes (e.g. ada mastergrade menyusul)" 
                   value={formData.notes} 
                   onChange={e => setFormData({...formData, notes: e.target.value})}
-                  className="w-full bg-card-bg border border-zinc-850 px-4 py-3 rounded-xl text-white text-sm outline-none focus:border-brand-green h-16 resize-none"
+                  className="w-full bg-card-bg px-4 py-3 rounded-xl text-white text-sm outline-none focus:bg-zinc-800 transition h-16 resize-none"
                 />
 
                 <button 
@@ -801,16 +905,14 @@ export default function Home() {
                 >
                   <X size={18} />
                 </button>
-              </div>
-
-              <form onSubmit={handleEditProject} className="flex flex-col gap-3">
+              </div>              <form onSubmit={handleEditProject} className="flex flex-col gap-3">
                 <input 
                   type="text" 
                   placeholder="Nama Project" 
                   required
                   value={formData.title} 
                   onChange={e => setFormData({...formData, title: e.target.value})}
-                  className="w-full bg-card-bg border border-zinc-850 px-4 py-3 rounded-xl text-white text-sm outline-none focus:border-brand-green"
+                  className="w-full bg-card-bg px-4 py-3 rounded-xl text-white text-sm outline-none focus:bg-zinc-800 transition"
                 />
                 
                 <input 
@@ -818,7 +920,7 @@ export default function Home() {
                   placeholder="Sutradara/Client" 
                   value={formData.director} 
                   onChange={e => setFormData({...formData, director: e.target.value})}
-                  className="w-full bg-card-bg border border-zinc-850 px-4 py-3 rounded-xl text-white text-sm outline-none focus:border-brand-green"
+                  className="w-full bg-card-bg px-4 py-3 rounded-xl text-white text-sm outline-none focus:bg-zinc-800 transition"
                 />
 
                 <div className="grid grid-cols-2 gap-3">
@@ -827,14 +929,14 @@ export default function Home() {
                     placeholder="PM/Producer" 
                     value={formData.pm} 
                     onChange={e => setFormData({...formData, pm: e.target.value})}
-                    className="bg-card-bg border border-zinc-850 px-4 py-3 rounded-xl text-white text-sm outline-none focus:border-brand-green"
+                    className="bg-card-bg px-4 py-3 rounded-xl text-white text-sm outline-none focus:bg-zinc-800 transition"
                   />
                   <input 
                     type="text" 
                     placeholder="Agency/Lokasi" 
                     value={formData.agency} 
                     onChange={e => setFormData({...formData, agency: e.target.value})}
-                    className="bg-card-bg border border-zinc-850 px-4 py-3 rounded-xl text-white text-sm outline-none focus:border-brand-green"
+                    className="bg-card-bg px-4 py-3 rounded-xl text-white text-sm outline-none focus:bg-zinc-800 transition"
                   />
                 </div>
 
@@ -845,17 +947,17 @@ export default function Home() {
                       type="date" 
                       value={formData.date} 
                       onChange={e => setFormData({...formData, date: e.target.value})}
-                      className="bg-card-bg border border-zinc-850 px-4 py-3 rounded-xl text-white text-sm outline-none focus:border-brand-green"
+                      className="bg-card-bg px-4 py-3 rounded-xl text-white text-sm outline-none focus:bg-zinc-800 transition"
                     />
                   </div>
                   <div className="flex flex-col gap-1">
                     <label className="text-zinc-500 text-[10px] px-1">Nilai Project (IDR)</label>
                     <input 
-                      type="number" 
-                      placeholder="e.g. 10000000" 
-                      value={formData.value} 
-                      onChange={e => setFormData({...formData, value: e.target.value})}
-                      className="bg-card-bg border border-zinc-850 px-4 py-3 rounded-xl text-white text-sm outline-none focus:border-brand-green"
+                      type="text" 
+                      placeholder="e.g. 10.000.000" 
+                      value={formatNumberWithDots(formData.value)} 
+                      onChange={e => setFormData({...formData, value: parseDotsToNumber(e.target.value)})}
+                      className="bg-card-bg px-4 py-3 rounded-xl text-white text-sm outline-none focus:bg-zinc-800 transition font-number"
                     />
                   </div>
                 </div>
@@ -865,7 +967,7 @@ export default function Home() {
                   placeholder="Jenis Pekerjaan" 
                   value={formData.projectType} 
                   onChange={e => setFormData({...formData, projectType: e.target.value})}
-                  className="w-full bg-card-bg border border-zinc-850 px-4 py-3 rounded-xl text-white text-sm outline-none focus:border-brand-green"
+                  className="w-full bg-card-bg px-4 py-3 rounded-xl text-white text-sm outline-none focus:bg-zinc-800 transition"
                 />
 
                 <div className="grid grid-cols-2 gap-3">
@@ -874,10 +976,11 @@ export default function Home() {
                     <select
                       value={formData.status}
                       onChange={e => setFormData({...formData, status: e.target.value})}
-                      className="bg-card-bg border border-zinc-850 px-4 py-3 rounded-xl text-white text-sm outline-none focus:border-brand-green"
+                      className="bg-card-bg px-4 py-3 rounded-xl text-white text-sm outline-none focus:bg-zinc-800 transition"
                     >
                       <option value="on">On</option>
                       <option value="tbc">TBC</option>
+                      <option value="done">Done</option>
                     </select>
                   </div>
                   <div className="flex flex-col gap-1">
@@ -885,7 +988,7 @@ export default function Home() {
                     <select
                       value={formData.paymentStatus}
                       onChange={e => setFormData({...formData, paymentStatus: e.target.value})}
-                      className="bg-card-bg border border-zinc-850 px-4 py-3 rounded-xl text-white text-sm outline-none focus:border-brand-green"
+                      className="bg-card-bg px-4 py-3 rounded-xl text-white text-sm outline-none focus:bg-zinc-800 transition"
                     >
                       <option value="unpaid">Unpaid</option>
                       <option value="paid">Paid</option>
@@ -894,41 +997,53 @@ export default function Home() {
                 </div>
 
                 <div className="border-t border-zinc-900 pt-3 flex flex-col gap-2">
-                  <span className="text-zinc-500 text-[11px] px-1 font-semibold">Detil Client & BAST</span>
-                  <input 
-                    type="text" 
-                    placeholder="Nama Kontak Client" 
-                    value={formData.contactName} 
-                    onChange={e => setFormData({...formData, contactName: e.target.value})}
-                    className="w-full bg-card-bg border border-zinc-850 px-4 py-3 rounded-xl text-white text-sm outline-none focus:border-brand-green"
-                  />
-                  <input 
-                    type="text" 
-                    placeholder="No WA Client" 
-                    value={formData.contactPhone} 
-                    onChange={e => setFormData({...formData, contactPhone: e.target.value})}
-                    className="w-full bg-card-bg border border-zinc-850 px-4 py-3 rounded-xl text-white text-sm outline-none focus:border-brand-green"
-                  />
-                  <input 
-                    type="text" 
-                    placeholder="Perusahaan Client" 
-                    value={formData.clientCompany} 
-                    onChange={e => setFormData({...formData, clientCompany: e.target.value})}
-                    className="w-full bg-card-bg border border-zinc-850 px-4 py-3 rounded-xl text-white text-sm outline-none focus:border-brand-green"
-                  />
-                  <textarea 
-                    placeholder="Alamat Lengkap Client" 
-                    value={formData.clientAddress} 
-                    onChange={e => setFormData({...formData, clientAddress: e.target.value})}
-                    className="w-full bg-card-bg border border-zinc-850 px-4 py-3 rounded-xl text-white text-sm outline-none focus:border-brand-green h-16 resize-none"
-                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowEditBAST(!showEditBAST)}
+                    className="flex justify-between items-center w-full text-left text-zinc-400 hover:text-white transition px-1 py-1"
+                  >
+                    <span className="text-[11px] font-semibold uppercase tracking-wider">Detil Client & BAST (Opsional)</span>
+                    <ChevronDown size={16} className={`transition-transform duration-200 ${showEditBAST ? "rotate-180" : ""}`} />
+                  </button>
+                  
+                  {showEditBAST && (
+                    <div className="flex flex-col gap-2 mt-1">
+                      <input 
+                        type="text" 
+                        placeholder="Nama Kontak Client" 
+                        value={formData.contactName} 
+                        onChange={e => setFormData({...formData, contactName: e.target.value})}
+                        className="w-full bg-card-bg px-4 py-3 rounded-xl text-white text-sm outline-none focus:bg-zinc-800 transition"
+                      />
+                      <input 
+                        type="text" 
+                        placeholder="No WA Client" 
+                        value={formData.contactPhone} 
+                        onChange={e => setFormData({...formData, contactPhone: e.target.value})}
+                        className="w-full bg-card-bg px-4 py-3 rounded-xl text-white text-sm outline-none focus:bg-zinc-800 transition"
+                      />
+                      <input 
+                        type="text" 
+                        placeholder="Perusahaan Client" 
+                        value={formData.clientCompany} 
+                        onChange={e => setFormData({...formData, clientCompany: e.target.value})}
+                        className="w-full bg-card-bg px-4 py-3 rounded-xl text-white text-sm outline-none focus:bg-zinc-800 transition"
+                      />
+                      <textarea 
+                        placeholder="Alamat Lengkap Client" 
+                        value={formData.clientAddress} 
+                        onChange={e => setFormData({...formData, clientAddress: e.target.value})}
+                        className="w-full bg-card-bg px-4 py-3 rounded-xl text-white text-sm outline-none focus:bg-zinc-800 transition h-16 resize-none"
+                      />
+                    </div>
+                  )}
                 </div>
 
                 <textarea 
                   placeholder="Keterangan / Notes" 
                   value={formData.notes} 
                   onChange={e => setFormData({...formData, notes: e.target.value})}
-                  className="w-full bg-card-bg border border-zinc-850 px-4 py-3 rounded-xl text-white text-sm outline-none focus:border-brand-green h-16 resize-none"
+                  className="w-full bg-card-bg px-4 py-3 rounded-xl text-white text-sm outline-none focus:bg-zinc-800 transition h-16 resize-none"
                 />
 
                 <div className="flex gap-3 mt-2">
@@ -988,27 +1103,27 @@ export default function Home() {
                     placeholder="Nama Lengkap" 
                     value={userDetails.name}
                     onChange={e => setUserDetails({...userDetails, name: e.target.value})}
-                    className="w-full bg-card-bg border border-zinc-850 px-4 py-3 rounded-xl text-white text-sm outline-none focus:border-brand-green"
+                    className="w-full bg-card-bg px-4 py-3 rounded-xl text-white text-sm outline-none focus:bg-zinc-800 transition"
                   />
                   <input 
                     type="text" 
                     placeholder="Nama Perusahaan (e.g. Freelancer)" 
                     value={userDetails.company}
                     onChange={e => setUserDetails({...userDetails, company: e.target.value})}
-                    className="w-full bg-card-bg border border-zinc-850 px-4 py-3 rounded-xl text-white text-sm outline-none focus:border-brand-green"
+                    className="w-full bg-card-bg px-4 py-3 rounded-xl text-white text-sm outline-none focus:bg-zinc-800 transition"
                   />
                   <input 
                     type="text" 
                     placeholder="Nomor Telepon" 
                     value={userDetails.phone}
                     onChange={e => setUserDetails({...userDetails, phone: e.target.value})}
-                    className="w-full bg-card-bg border border-zinc-850 px-4 py-3 rounded-xl text-white text-sm outline-none focus:border-brand-green"
+                    className="w-full bg-card-bg px-4 py-3 rounded-xl text-white text-sm outline-none focus:bg-zinc-800 transition"
                   />
                   <textarea 
                     placeholder="Alamat Lengkap" 
                     value={userDetails.address}
                     onChange={e => setUserDetails({...userDetails, address: e.target.value})}
-                    className="w-full bg-card-bg border border-zinc-850 px-4 py-3 rounded-xl text-white text-sm outline-none focus:border-brand-green h-16 resize-none"
+                    className="w-full bg-card-bg px-4 py-3 rounded-xl text-white text-sm outline-none focus:bg-zinc-800 transition h-16 resize-none"
                   />
                   <div className="grid grid-cols-2 gap-3">
                     <input 
@@ -1016,53 +1131,23 @@ export default function Home() {
                       placeholder="Nama Bank" 
                       value={userDetails.bank}
                       onChange={e => setUserDetails({...userDetails, bank: e.target.value})}
-                      className="bg-card-bg border border-zinc-850 px-4 py-3 rounded-xl text-white text-sm outline-none focus:border-brand-green"
+                      className="bg-card-bg px-4 py-3 rounded-xl text-white text-sm outline-none focus:bg-zinc-800 transition"
                     />
                     <input 
                       type="text" 
                       placeholder="No Rekening" 
                       value={userDetails.accountNo}
                       onChange={e => setUserDetails({...userDetails, accountNo: e.target.value})}
-                      className="bg-card-bg border border-zinc-850 px-4 py-3 rounded-xl text-white text-sm outline-none focus:border-brand-green"
+                      className="bg-card-bg px-4 py-3 rounded-xl text-white text-sm outline-none focus:bg-zinc-800 transition"
                     />
                   </div>
-                </div>
-
-                {/* Firebase Connection Config */}
-                <div className="flex flex-col gap-2 border-t border-zinc-900 pt-3">
-                  <span className="text-brand-green text-xs font-semibold uppercase tracking-wider">Koneksi Firebase Firestore (Opsional)</span>
-                  <p className="text-[11px] text-zinc-500 mb-1 leading-normal">
-                    Kosongkan untuk menyimpan data secara lokal di HP/Browser. Masukkan Firebase Web Config jika ingin sinkronisasi Cloud.
-                  </p>
-                  
-                  <input 
-                    type="text" 
-                    placeholder="API Key" 
-                    value={firebaseInput.apiKey}
-                    onChange={e => setFirebaseInput({...firebaseInput, apiKey: e.target.value})}
-                    className="w-full bg-card-bg border border-zinc-850 px-4 py-3 rounded-xl text-white text-sm outline-none focus:border-brand-green"
-                  />
-                  <input 
-                    type="text" 
-                    placeholder="Project ID" 
-                    value={firebaseInput.projectId}
-                    onChange={e => setFirebaseInput({...firebaseInput, projectId: e.target.value})}
-                    className="w-full bg-card-bg border border-zinc-850 px-4 py-3 rounded-xl text-white text-sm outline-none focus:border-brand-green"
-                  />
-                  <input 
-                    type="text" 
-                    placeholder="Auth Domain" 
-                    value={firebaseInput.authDomain}
-                    onChange={e => setFirebaseInput({...firebaseInput, authDomain: e.target.value})}
-                    className="w-full bg-card-bg border border-zinc-850 px-4 py-3 rounded-xl text-white text-sm outline-none focus:border-brand-green"
-                  />
                 </div>
 
                 <button 
                   onClick={handleSaveSettings}
                   className="w-full py-4 bg-brand-green text-black font-semibold rounded-xl hover:bg-green-500 transition mt-2 active:scale-95 text-sm"
                 >
-                  Simpan & Hubungkan
+                  Simpan Pengaturan
                 </button>
               </div>
             </motion.div>

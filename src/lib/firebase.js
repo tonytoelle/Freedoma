@@ -104,32 +104,13 @@ const DEFAULT_FIREBASE_CONFIG = {
   appId: "1:573941550384:web:e22977c36a6fb02ab60cf5"
 };
 
-// Load Firebase Config if saved
+// Load Firebase Config if saved (Always return default config now)
 export function getSavedFirebaseConfig() {
-  if (typeof window === "undefined") return null;
-  try {
-    const saved = localStorage.getItem(FIREBASE_CONFIG_KEY);
-    if (!saved) return DEFAULT_FIREBASE_CONFIG;
-    const parsed = JSON.parse(saved);
-    if (parsed && parsed.apiKey && parsed.projectId) {
-      return parsed;
-    }
-    return DEFAULT_FIREBASE_CONFIG;
-  } catch (e) {
-    console.error("Error parsing firebase config from localStorage", e);
-    return DEFAULT_FIREBASE_CONFIG;
-  }
+  return DEFAULT_FIREBASE_CONFIG;
 }
 
-
-
 export function saveFirebaseConfig(config) {
-  if (typeof window === "undefined") return;
-  if (!config) {
-    localStorage.removeItem(FIREBASE_CONFIG_KEY);
-  } else {
-    localStorage.setItem(FIREBASE_CONFIG_KEY, JSON.stringify(config));
-  }
+  // Config is now locked to DEFAULT_FIREBASE_CONFIG, this is a no-op
 }
 
 // Check if Firebase is active
