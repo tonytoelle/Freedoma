@@ -119,8 +119,9 @@ export async function generateInvoicePDF(project, userDetails) {
   doc.setTextColor(60, 60, 60);
   
   // Wrap description text
+  const cleanType = (project.projectType || "Package Color Grading Session").replace(/\s*\bTVC\b\s*/gi, "").trim();
   const descLines = doc.splitTextToSize(
-    `${project.projectType || "Package Color Grading Session"}\n${project.title}`,
+    `${cleanType}\n${project.title}`,
     90
   );
   doc.text(descLines, 20, 120);
@@ -256,7 +257,8 @@ export async function generateBASTPDF(project, userDetails) {
 
   // Agreement and job details
   y += 15;
-  const agreementText = `Kedua belah pihak Sepakat untuk melakukan serah terima pekerjaan ${project.projectType || "Color Grading Session"} yang sudah selesai dilakukan oleh Pihak Pertama kepada Pihak Kedua untuk :`;
+  const bastType = (project.projectType || "Color Grading Session").replace(/\s*\bTVC\b\s*/gi, "").trim();
+  const agreementText = `Kedua belah pihak Sepakat untuk melakukan serah terima pekerjaan ${bastType} yang sudah selesai dilakukan oleh Pihak Pertama kepada Pihak Kedua untuk :`;
   const agreementLines = doc.splitTextToSize(agreementText, 170);
   doc.text(agreementLines, 20, y);
 
@@ -268,11 +270,11 @@ export async function generateBASTPDF(project, userDetails) {
 
   doc.setFont("helvetica", "normal");
   doc.text(`: ${project.title}`, 55, y);
-  doc.text(`: ${project.projectType || "Color Grading"}`, 55, y + 6);
+  doc.text(`: ${bastType}`, 55, y + 6);
   doc.text(`: ${formattedValue}`, 55, y + 12);
 
   y += 24;
-  const closingText = `Demikian Berita Acara serah terima pekerjaan ${project.projectType || "Color Grading Session"} ini kami buat dan kami tandatangani.`;
+  const closingText = `Demikian Berita Acara serah terima pekerjaan ${bastType} ini kami buat dan kami tandatangani.`;
   const closingLines = doc.splitTextToSize(closingText, 170);
   doc.text(closingLines, 20, y);
 
